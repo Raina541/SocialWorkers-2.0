@@ -89,9 +89,26 @@ export const OpportunityCard: React.FC<OpportunityCardProps> = ({
 
       {/* 3. Combined Time & Location Row */}
       <View style={styles.metaRow}>
-        <Text style={[styles.metaText, { color: themeColors.neutralForeground3 }]}>
-          ⏱ {opportunity.durationHrs < 1 ? `${opportunity.durationHrs * 60}m` : `${opportunity.durationHrs} hrs`}  ·  {opportunity.isRemote ? '💻 Remote' : `📍 ${opportunity.distanceKm < 1 ? 'Under 1 km' : `${opportunity.distanceKm.toFixed(1)} km`}`}
-        </Text>
+        <View style={styles.metaItem}>
+          <Ionicons name="time-outline" size={14} color={themeColors.neutralForeground3} style={styles.metaIcon} />
+          <Text style={[styles.metaText, { color: themeColors.neutralForeground3 }]}>
+            {opportunity.durationHrs < 1 ? `${opportunity.durationHrs * 60}m` : `${opportunity.durationHrs} hrs`}
+          </Text>
+        </View>
+
+        <Text style={[styles.metaDivider, { color: themeColors.neutralForeground3 }]}>·</Text>
+
+        <View style={styles.metaItem}>
+          <Ionicons
+            name={opportunity.isRemote ? "laptop-outline" : "location-outline"}
+            size={14}
+            color={themeColors.neutralForeground3}
+            style={styles.metaIcon}
+          />
+          <Text style={[styles.metaText, { color: themeColors.neutralForeground3 }]}>
+            {opportunity.isRemote ? 'Remote' : `${opportunity.distanceKm < 1 ? 'Under 1 km' : `${opportunity.distanceKm.toFixed(1)} km`}`}
+          </Text>
+        </View>
       </View>
 
       {/* 4. Category Tag with Subtle Border */}
@@ -162,7 +179,19 @@ const styles = StyleSheet.create({
   },
   metaRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: Spacing.xs,
+  },
+  metaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  metaIcon: {
+    marginRight: 4,
+  },
+  metaDivider: {
+    marginHorizontal: 8,
+    fontSize: 12,
   },
   metaText: {
     ...Typography.caption,
