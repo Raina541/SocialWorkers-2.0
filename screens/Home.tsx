@@ -22,6 +22,7 @@ import { HandshakeHeartIcon } from '../components/HandshakeHeartIcon';
 import { OpportunityCard } from '../components/OpportunityCard';
 import { MicroVolunteering } from './MicroVolunteering';
 import { NotificationsScreen } from './NotificationsScreen';
+import { RelaxedVolunteerIllustration } from '../components/RelaxedVolunteerIllustration';
 import { Personalization, CauseType, Opportunity } from '../services/personalization';
 import { StoryService, Story } from '../services/storyManager';
 import { Ionicons } from '@expo/vector-icons';
@@ -68,6 +69,7 @@ export const Home: React.FC<HomeProps> = ({
   onSetPagerScrollEnabled,
 }) => {
   const themeColors = isDarkMode ? Colors.dark : Colors.light;
+  const isCompactScreen = screenWidth < 380;
 
   // --- State management ---
   const [causes, setCauses] = useState<CauseType[]>([]);
@@ -354,30 +356,48 @@ export const Home: React.FC<HomeProps> = ({
         {/* ## Section 3: Micro-Volunteering Opportunity Card ## */}
         <Card
           variant="Filled"
-          size="Large"
           onPress={() => setShowMicroVolunteering(true)}
-          style={[styles.microCard, { borderColor: themeColors.neutralStroke2 }]}
+          isDarkMode={isDarkMode}
+          style={[
+            styles.microCard,
+            {
+              borderColor: themeColors.neutralStroke2,
+              backgroundColor: themeColors.neutralBackground1,
+              overflow: 'visible', // Allow overflow within card padding area
+            }
+          ]}
         >
-          <View style={styles.microContentRow}>
-            {/* Left stack */}
-            <View style={styles.microLeft}>
-              <Text style={[styles.microTitle, { color: themeColors.neutralForeground1 }]}>
-                Micro-Volunteering Opportunities
-              </Text>
-              <Text style={[styles.microSubtitle, { color: themeColors.neutralForeground3 }]}>
-                Volunteering doesn't always need to be time-consuming.
-              </Text>
-              
-              <View style={[styles.microBadge, { backgroundColor: themeColors.brandForeground1 }]}>
-                <Text style={styles.microBadgeText}>Find opportunities</Text>
+          <View style={[styles.microContentRow, isCompactScreen && styles.microContentRowVertical]}>
+            {/* Left stack (approximately 55-60% width on horizontal layout) */}
+            <View style={[styles.microLeft, isCompactScreen && styles.microLeftVertical]}>
+              <View>
+                <Text style={[styles.microTitle, { color: themeColors.neutralForeground1 }]}>
+                  Micro-Volunteering Opportunities
+                </Text>
+                <Text style={[styles.microSubtitle, { color: themeColors.neutralForeground3 }]}>
+                  Volunteering doesn't always need to be time-consuming. Find bite-sized tasks.
+                </Text>
               </View>
+              
+              <Pressable
+                onPress={() => setShowMicroVolunteering(true)}
+                style={[
+                  styles.microCtaButton,
+                  { backgroundColor: themeColors.brandBackground }
+                ]}
+              >
+                <Text style={styles.microCtaButtonText}>Find opportunities</Text>
+              </Pressable>
             </View>
 
-            {/* Right Image */}
-            <Image
-              source={{ uri: 'https://images.unsplash.com/photo-1559027615-cd4628902d4a?w=400' }}
-              style={styles.microImage}
-            />
+            {/* Right Section (approximately 40-45% width on horizontal layout) */}
+            <View style={[styles.microRight, isCompactScreen && styles.microRightVertical]}>
+              <RelaxedVolunteerIllustration
+                color={themeColors.brandForeground1}
+                size={isCompactScreen ? 110 : 125}
+                style={isCompactScreen ? styles.microIllustrationVertical : styles.microIllustration}
+              />
+            </View>
           </View>
         </Card>
 
@@ -775,45 +795,87 @@ const styles = StyleSheet.create({
   },
   microCard: {
     marginTop: Spacing.l,
-    aspectRatio: 2.3,
     padding: Spacing.xl,
-    justifyContent: 'center',
+    borderRadius: Shapes.rounded + 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   microContentRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'stretch',
     justifyContent: 'space-between',
+    minHeight: 140,
+  },
+  microContentRowVertical: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    minHeight: undefined,
   },
   microLeft: {
-    flex: 1,
-    paddingRight: Spacing.m,
+    flex: 0.58,
+    justifyContent: 'space-between',
+    paddingRight: 24, // Minimum 24px gap
+  },
+  microLeftVertical: {
+    flex: undefined,
+    paddingRight: 0,
+    marginBottom: Spacing.m,
+  },
+  microRight: {
+    flex: 0.42,
+    justifyContent: 'flex-end',
+    alignItems: 'flex-end',
+    position: 'relative',
+    overflow: 'visible',
+  },
+  microRightVertical: {
+    flex: undefined,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: Spacing.s,
   },
   microTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    lineHeight: 20,
-    marginBottom: 4,
+    fontSize: 20,
+    fontWeight: 'bold',
+    lineHeight: 26,
+    marginBottom: Spacing.xs,
   },
   microSubtitle: {
-    fontSize: 12,
-    lineHeight: 16,
-    marginBottom: Spacing.s,
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: Spacing.l,
   },
-  microBadge: {
+  microCtaButton: {
     alignSelf: 'flex-start',
-    paddingHorizontal: Spacing.m,
-    paddingVertical: Spacing.xs / 2,
-    borderRadius: Shapes.circular,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.s,
+    borderRadius: 24, // Pill-shaped
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  microBadgeText: {
+  microCtaButtonText: {
     color: '#ffffff',
-    fontSize: 11,
+    fontSize: 14,
     fontWeight: 'bold',
   },
-  microImage: {
-    width: 70,
-    height: 70,
-    borderRadius: Shapes.rounded,
+  microIllustration: {
+    position: 'absolute',
+    bottom: -20, // Slightly overflow bottom boundary
+    right: -10, // Slightly overflow right boundary
+  },
+  microIllustrationVertical: {
+    position: 'relative',
+    bottom: 0,
+    right: 0,
+    marginTop: Spacing.s,
   },
   locationHeaderRow: {
     flexDirection: 'row',
