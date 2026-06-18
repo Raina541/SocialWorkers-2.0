@@ -672,7 +672,7 @@ export const Home: React.FC<HomeProps> = ({
         <Text style={[styles.sectionTitle, Typography.sectionHeading, { color: themeColors.neutralForeground1 }]}>
           Volunteer from anywhere
         </Text>
-        <Text style={[Typography.caption, { color: themeColors.neutralForeground3, marginBottom: Spacing.xs, marginTop: -Spacing.xs }]}>
+        <Text style={[Typography.body, { color: themeColors.neutralForeground3, marginBottom: Spacing.xs, marginTop: -Spacing.xs }]}>
           Remote volunteering opportunities
         </Text>
         
@@ -691,7 +691,7 @@ export const Home: React.FC<HomeProps> = ({
         <Text style={[styles.sectionTitle, Typography.sectionHeading, { color: themeColors.neutralForeground1 }]}>
           Idea threads
         </Text>
-        <Text style={[Typography.caption, { color: themeColors.neutralForeground3, marginBottom: Spacing.s, marginTop: -Spacing.xs }]}>
+        <Text style={[Typography.body, { color: themeColors.neutralForeground3, marginBottom: Spacing.s, marginTop: -Spacing.xs }]}>
           Early-stage initiatives looking for support. Show your interest to help bring these ideas to life.
         </Text>
 
