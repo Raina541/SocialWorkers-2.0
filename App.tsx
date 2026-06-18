@@ -84,31 +84,7 @@ function MainLayout() {
     >
       <StatusBar style={isDarkMode ? 'light' : 'dark'} />
       
-      {/* Top Header */}
-      <View
-        style={[
-          styles.header,
-          {
-            backgroundColor: themeColors.neutralBackground1,
-            borderBottomColor: themeColors.neutralStroke2,
-          },
-        ]}
-      >
-        <Text style={[Typography.bodyStrong, { color: themeColors.brandForeground1 }]}>
-          Social Workers 2.0
-        </Text>
-        
-        <Text style={[Typography.bodyStrong, styles.headerTitle, { color: themeColors.neutralForeground1 }]}>
-          {tabs[activeTab].name}
-        </Text>
 
-        <View style={styles.headerRight}>
-          <Pressable style={styles.headerIconButton} onPress={() => console.log('Search clicked')}>
-            <Ionicons name="search" size={20} color={themeColors.neutralForeground1} />
-          </Pressable>
-          <Avatar size={32} name="Nilap Saha" presence={presence} isDarkMode={isDarkMode} />
-        </View>
-      </View>
 
       {/* Swipeable Pager Area */}
       <ScrollView
