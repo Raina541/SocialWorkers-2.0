@@ -446,6 +446,68 @@ export const Home: React.FC<HomeProps> = ({
     Personalization.getNotifications().filter(n => n.unread).length
   );
 
+  // Micro-volunteering Card Redesign states and animations
+  const [selectedTimeFilter, setSelectedTimeFilter] = useState<number>(15);
+  const [microVolCount, setMicroVolCount] = useState(0);
+
+  // 1. Counter roll-up animation: 0 -> 12
+  useEffect(() => {
+    let current = 0;
+    const interval = setInterval(() => {
+      if (current < 12) {
+        current += 1;
+        setMicroVolCount(current);
+      } else {
+        clearInterval(interval);
+      }
+    }, 60);
+    return () => clearInterval(interval);
+  }, []);
+
+  // 2. Shimmer animation for preview rows on filter change
+  const previewShimmerAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    previewShimmerAnim.setValue(0);
+    Animated.timing(previewShimmerAnim, {
+      toValue: 1,
+      duration: 800,
+      easing: Easing.out(Easing.ease),
+      useNativeDriver: true,
+    }).start();
+  }, [selectedTimeFilter]);
+
+  const shimmerTranslateX = previewShimmerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-180, screenWidth - Spacing.m * 2],
+  });
+
+  // 3. CTA Haptic spring scale animation
+  const ctaButtonScale = useRef(new Animated.Value(1)).current;
+  const handleCtaPressIn = () => {
+    Animated.spring(ctaButtonScale, {
+      toValue: 0.96,
+      useNativeDriver: true,
+    }).start();
+  };
+  const handleCtaPressOut = () => {
+    Animated.spring(ctaButtonScale, {
+      toValue: 1.0,
+      tension: 40,
+      friction: 5,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const getMicroVolunteeringPreviewList = () => {
+    const allOpps = Personalization.getRawOpportunities();
+    const filtered = allOpps.filter(opp => {
+      const commitmentMins = Math.round(opp.durationHrs * 60);
+      return opp.durationHrs <= 2.0 && commitmentMins <= selectedTimeFilter;
+    });
+    return filtered.slice(0, 2);
+  };
+
+
   // --- Custom Transition & Gesture Implementation ---
   const isTransitioning = useRef(false);
   const microVolunteeringAnim = useRef(new Animated.Value(0)).current;
@@ -1396,52 +1458,225 @@ export const Home: React.FC<HomeProps> = ({
         </View>
 
         {/* ## Section 3: Micro-Volunteering Opportunity Card ## */}
-        <Card
-          variant="Filled"
+        <Pressable
           onPress={() => openMicroVolunteering()}
-          isDarkMode={isDarkMode}
-          style={[
+          style={({ pressed }) => [
             styles.microCard,
             {
               borderColor: themeColors.neutralStroke2,
-              backgroundColor: themeColors.neutralBackground1,
-              overflow: 'visible', // Allow overflow within card padding area
+              padding: 0,
+              overflow: 'hidden',
             }
           ]}
         >
-          <View style={[styles.microContentRow, isCompactScreen && styles.microContentRowVertical]}>
-            {/* Left stack (approximately 55-60% width on horizontal layout) */}
-            <View style={[styles.microLeft, isCompactScreen && styles.microLeftVertical]}>
-              <View>
-                <Text style={[styles.microTitle, { color: themeColors.neutralForeground1 }]}>
-                  Micro-Volunteering Opportunities
-                </Text>
-                <Text style={[styles.microSubtitle, { color: themeColors.neutralForeground3 }]}>
-                  Volunteering doesn't always need to be time-consuming. Find bite-sized tasks.
-                </Text>
-              </View>
-              
-              <Pressable
-                onPress={() => openMicroVolunteering()}
-                style={[
-                  styles.microCtaButton,
-                  { backgroundColor: themeColors.brandBackground }
-                ]}
-              >
-                <Text style={styles.microCtaButtonText}>Find opportunities</Text>
-              </Pressable>
+          <LinearGradient
+            colors={isDarkMode ? ['#0e3c6c', '#15213b'] : ['#e9f3fc', '#ffffff']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={{ padding: Spacing.m }}
+          >
+            {/* Top Right Ornament: Soft orb or overlapping rounded task card shapes */}
+            <View style={styles.topRightOrnamentContainer} pointerEvents="none">
+              <View style={[styles.ornamentOrb, { backgroundColor: isDarkMode ? 'rgba(15, 108, 189, 0.15)' : 'rgba(15, 108, 189, 0.08)' }]} />
+              <View style={[styles.ornamentCard1, { borderColor: isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(15,108,189,0.06)' }]} />
+              <View style={[styles.ornamentCard2, { borderColor: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(15,108,189,0.08)' }]} />
             </View>
 
-            {/* Right Section (approximately 40-45% width on horizontal layout) */}
-            <View style={[styles.microRight, isCompactScreen && styles.microRightVertical]}>
-              <RelaxedVolunteerIllustration
-                color={themeColors.brandForeground1}
-                size={isCompactScreen ? 110 : 125}
-                style={isCompactScreen ? styles.microIllustrationVertical : styles.microIllustration}
+            {/* Eyebrow Row */}
+            <View style={styles.microEyebrowRow}>
+              <View style={[styles.microPill, { backgroundColor: isDarkMode ? 'rgba(15,108,189,0.3)' : '#dbeafe' }]}>
+                <Text style={[styles.microPillText, { color: isDarkMode ? '#60a5fa' : '#1e40af' }]}>
+                  Micro-volunteering
+                </Text>
+              </View>
+              <View style={styles.microCounterContainer}>
+                <OdometerText
+                  value={microVolCount}
+                  style={[styles.microCounterNumber, { color: themeColors.brandForeground1 }]}
+                />
+                <Text style={[styles.microCounterLabel, { color: themeColors.neutralForeground3 }]}>
+                  {' '}tasks near you
+                </Text>
+              </View>
+            </View>
+
+            {/* Headline & Subtitle */}
+            <Text style={[styles.microNewTitle, { color: themeColors.neutralForeground1 }]}>
+              Help in 15 minutes or less
+            </Text>
+            <Text style={[styles.microNewSubtitle, { color: themeColors.neutralForeground3 }]} numberOfLines={1}>
+              Bite-sized tasks. High-impact results.
+            </Text>
+
+            {/* Selectable Time Filter Chips */}
+            <View style={styles.timeChipsRow}>
+              {[5, 15, 30].map((mins) => {
+                const isSelected = selectedTimeFilter === mins;
+                return (
+                  <Pressable
+                    key={mins}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isSelected }}
+                    accessibilityLabel={`Filter by ${mins} minutes`}
+                    onPress={() => setSelectedTimeFilter(mins)}
+                    style={[
+                      styles.timeChip,
+                      {
+                        backgroundColor: isSelected
+                          ? themeColors.brandForeground1
+                          : 'transparent',
+                        borderColor: isSelected
+                          ? themeColors.brandForeground1
+                          : themeColors.neutralStroke2,
+                      }
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.timeChipText,
+                        {
+                          color: isSelected
+                            ? '#ffffff'
+                            : themeColors.neutralForeground1,
+                        }
+                      ]}
+                    >
+                      {mins} min
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {/* Opportunity Preview Rows */}
+            <View style={styles.previewsContainer}>
+              {getMicroVolunteeringPreviewList().map((opp, idx) => {
+                let iconName: any = 'help-circle-outline';
+                let iconColor = '#0f6cbd';
+                let iconBg = '#e1f0fa';
+                
+                if (opp.cause === 'Education') {
+                  iconName = 'book-outline';
+                  iconColor = '#107c41';
+                  iconBg = '#dff6dd';
+                } else if (opp.cause === 'Healthcare') {
+                  iconName = 'medical-outline';
+                  iconColor = '#107c10';
+                  iconBg = '#dff6dd';
+                } else if (opp.cause === 'Child Welfare') {
+                  iconName = 'heart-outline';
+                  iconColor = '#d83b01';
+                  iconBg = '#fde7e9';
+                } else if (opp.cause === 'Water, Sanitation, and Hygiene (WASH)') {
+                  iconName = 'water-outline';
+                  iconColor = '#0078d4';
+                  iconBg = '#e1dfdd';
+                } else if (opp.cause === 'Environment & Sustainability') {
+                  iconName = 'leaf-outline';
+                  iconColor = '#107c41';
+                  iconBg = '#dff6dd';
+                } else if (opp.cause === 'Poverty Alleviation & Livelihoods') {
+                  iconName = 'people-outline';
+                  iconColor = '#8764b8';
+                  iconBg = '#f2f0f5';
+                } else if (opp.cause === 'Support for Persons with Disabilities') {
+                  iconName = 'accessibility-outline';
+                  iconColor = '#0078d4';
+                  iconBg = '#e1f0fa';
+                } else if (opp.cause === 'Animal Welfare') {
+                  iconName = 'paw-outline';
+                  iconColor = '#a80000';
+                  iconBg = '#fde7e9';
+                }
+
+                if (isDarkMode) {
+                  iconBg = 'rgba(255,255,255,0.06)';
+                }
+
+                const durationMins = Math.round(opp.durationHrs * 60);
+                const accessibilityLabel = `${opp.title}, takes ${durationMins} minutes, location is ${opp.isRemote ? 'Remote' : `${opp.distanceKm} km away`}`;
+
+                return (
+                  <View
+                    key={opp.id}
+                    accessible={true}
+                    accessibilityLabel={accessibilityLabel}
+                    style={[
+                      styles.previewRow,
+                      {
+                        borderBottomColor: idx === 0 ? themeColors.neutralStroke2 : 'transparent',
+                        borderBottomWidth: idx === 0 ? 1 : 0,
+                      }
+                    ]}
+                  >
+                    <View style={[styles.previewIconWrapper, { backgroundColor: iconBg }]}>
+                      <Ionicons name={iconName} size={18} color={iconColor} />
+                    </View>
+                    <View style={styles.previewInfo}>
+                      <Text
+                        style={[styles.previewTitle, { color: themeColors.neutralForeground1 }]}
+                        numberOfLines={1}
+                      >
+                        {opp.title}
+                      </Text>
+                      <Text style={[styles.previewMeta, { color: themeColors.neutralForeground3 }]}>
+                        {durationMins}m • {opp.isRemote ? 'Remote' : `${opp.distanceKm} km`}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={14} color={themeColors.neutralForeground3} />
+                  </View>
+                );
+              })}
+
+              {/* Shimmer Overlay effect */}
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  styles.shimmerOverlay,
+                  {
+                    transform: [{ translateX: shimmerTranslateX }],
+                    backgroundColor: isDarkMode
+                      ? 'rgba(255, 255, 255, 0.05)'
+                      : 'rgba(255, 255, 255, 0.4)',
+                  }
+                ]}
               />
             </View>
-          </View>
-        </Card>
+
+            {/* Primary CTA (Button) with Spring Haptic Animation */}
+            <Animated.View style={{ transform: [{ scale: ctaButtonScale }] }}>
+              <Pressable
+                onPressIn={handleCtaPressIn}
+                onPressOut={handleCtaPressOut}
+                onPress={() => openMicroVolunteering()}
+                style={[styles.fullWidthCta, { backgroundColor: themeColors.brandForeground1 }]}
+                accessibilityRole="button"
+                accessibilityLabel="See all 12 opportunities"
+              >
+                <Text style={styles.fullWidthCtaText}>See all 12 opportunities</Text>
+                <Ionicons name="arrow-forward" size={16} color="#ffffff" style={{ marginLeft: 6 }} />
+              </Pressable>
+            </Animated.View>
+
+            {/* Secondary "How micro-volunteering works" text link */}
+            <Pressable
+              onPress={() => {
+                Alert.alert(
+                  "How Micro-Volunteering Works",
+                  "Micro-volunteering allows you to complete bite-sized tasks (under 30 minutes) on your phone or locally. No long-term commitment is needed. Simply select a task, follow the instructions, and make a quick difference!",
+                  [{ text: "Got it" }]
+                );
+              }}
+              style={styles.explanationLink}
+              accessibilityRole="link"
+              accessibilityLabel="How micro-volunteering works info button"
+            >
+              <Text style={[styles.explanationLinkText, { color: themeColors.brandForeground1 }]}>
+                How micro-volunteering works
+              </Text>
+            </Pressable>
+          </LinearGradient>
+        </Pressable>
 
         {/* ## Section 4: Location-Based Opportunities ## */}
         {localOpportunities.length >= 3 && (
@@ -2508,7 +2743,6 @@ const styles = StyleSheet.create({
   },
   microCard: {
     marginTop: Spacing.l,
-    padding: Spacing.xl,
     borderRadius: Shapes.rounded + 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -2516,56 +2750,141 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
-  microContentRow: {
+  topRightOrnamentContainer: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 150,
+    height: 120,
+    overflow: 'hidden',
+  },
+  ornamentOrb: {
+    position: 'absolute',
+    top: -40,
+    right: -40,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+  },
+  ornamentCard1: {
+    position: 'absolute',
+    top: 15,
+    right: 25,
+    width: 60,
+    height: 40,
+    borderRadius: 8,
+    borderWidth: 1,
+    transform: [{ rotate: '15deg' }],
+  },
+  ornamentCard2: {
+    position: 'absolute',
+    top: 25,
+    right: 15,
+    width: 60,
+    height: 40,
+    borderRadius: 8,
+    borderWidth: 1,
+    transform: [{ rotate: '-10deg' }],
+  },
+  microEyebrowRow: {
     flexDirection: 'row',
-    alignItems: 'stretch',
     justifyContent: 'space-between',
-    minHeight: 140,
+    alignItems: 'center',
+    marginBottom: Spacing.s,
   },
-  microContentRowVertical: {
-    flexDirection: 'column',
-    alignItems: 'stretch',
-    minHeight: undefined,
+  microPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
-  microLeft: {
-    flex: 0.58,
-    justifyContent: 'space-between',
-    paddingRight: 24, // Minimum 24px gap
+  microPillText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
   },
-  microLeftVertical: {
-    flex: undefined,
-    paddingRight: 0,
+  microCounterContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  microCounterNumber: {
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  microCounterLabel: {
+    fontSize: 13,
+  },
+  microNewTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    lineHeight: 24,
+    marginBottom: 2,
+  },
+  microNewSubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: Spacing.s,
+  },
+  timeChipsRow: {
+    flexDirection: 'row',
     marginBottom: Spacing.m,
   },
-  microRight: {
-    flex: 0.42,
-    justifyContent: 'flex-end',
-    alignItems: 'flex-end',
-    position: 'relative',
-    overflow: 'visible',
-  },
-  microRightVertical: {
-    flex: undefined,
+  timeChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginRight: Spacing.s,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: Spacing.s,
   },
-  microTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    lineHeight: 26,
-    marginBottom: Spacing.xs,
+  timeChipText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
-  microSubtitle: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: Spacing.l,
+  previewsContainer: {
+    borderRadius: 8,
+    backgroundColor: 'rgba(0,0,0,0.02)',
+    paddingHorizontal: Spacing.s,
+    marginBottom: Spacing.m,
+    overflow: 'hidden',
+    position: 'relative',
   },
-  microCtaButton: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.s,
-    borderRadius: 24, // Pill-shaped
+  previewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  previewIconWrapper: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: Spacing.s,
+  },
+  previewInfo: {
+    flex: 1,
+  },
+  previewTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+    marginBottom: 1,
+  },
+  previewMeta: {
+    fontSize: 11,
+  },
+  shimmerOverlay: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 100,
+    opacity: 0.5,
+  },
+  fullWidthCta: {
+    flexDirection: 'row',
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -2573,22 +2892,21 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
+    marginBottom: Spacing.s,
   },
-  microCtaButtonText: {
+  fullWidthCtaText: {
     color: '#ffffff',
     fontSize: 14,
     fontWeight: 'bold',
   },
-  microIllustration: {
-    position: 'absolute',
-    bottom: -20, // Slightly overflow bottom boundary
-    right: -10, // Slightly overflow right boundary
+  explanationLink: {
+    alignSelf: 'center',
+    paddingVertical: 4,
   },
-  microIllustrationVertical: {
-    position: 'relative',
-    bottom: 0,
-    right: 0,
-    marginTop: Spacing.s,
+  explanationLinkText: {
+    fontSize: 12,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
   locationHeaderRow: {
     flexDirection: 'row',
