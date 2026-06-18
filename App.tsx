@@ -42,6 +42,7 @@ function MainLayout() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [presence, setPresence] = useState<PresenceState>('Available');
   const [activeTab, setActiveTab] = useState(0);
+  const [pagerScrollEnabled, setPagerScrollEnabled] = useState(true);
 
   const scrollViewRef = useRef<ScrollView>(null);
   const themeColors = isDarkMode ? Colors.dark : Colors.light;
@@ -91,6 +92,7 @@ function MainLayout() {
         ref={scrollViewRef}
         horizontal
         pagingEnabled
+        scrollEnabled={pagerScrollEnabled}
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={handleScrollEnd}
         bounces={false}
@@ -98,7 +100,11 @@ function MainLayout() {
         style={styles.pager}
       >
         <View style={[styles.page, { width: screenWidth }]}>
-          <Home isDarkMode={isDarkMode} onNavigateToTab={handleTabPress} />
+          <Home
+            isDarkMode={isDarkMode}
+            onNavigateToTab={handleTabPress}
+            onSetPagerScrollEnabled={setPagerScrollEnabled}
+          />
         </View>
         
         <View style={[styles.page, { width: screenWidth }]}>

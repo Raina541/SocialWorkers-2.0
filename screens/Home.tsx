@@ -28,6 +28,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+const CARD_WIDTH = (screenWidth - Spacing.m * 2 - Spacing.s * 1.3) / 2.3;
 
 // Unsplash cause icon mapping
 const CAUSE_IMAGES: Record<CauseType, string> = {
@@ -58,9 +59,14 @@ interface Idea {
 interface HomeProps {
   isDarkMode?: boolean;
   onNavigateToTab?: (index: number) => void;
+  onSetPagerScrollEnabled?: (enabled: boolean) => void;
 }
 
-export const Home: React.FC<HomeProps> = ({ isDarkMode = false }) => {
+export const Home: React.FC<HomeProps> = ({
+  isDarkMode = false,
+  onNavigateToTab,
+  onSetPagerScrollEnabled,
+}) => {
   const themeColors = isDarkMode ? Colors.dark : Colors.light;
 
   // --- State management ---
@@ -309,32 +315,41 @@ export const Home: React.FC<HomeProps> = ({ isDarkMode = false }) => {
           Learn about causes
         </Text>
         
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.causesContainer}
+        <View
+          onTouchStart={() => onSetPagerScrollEnabled?.(false)}
+          onTouchEnd={() => onSetPagerScrollEnabled?.(true)}
+          onTouchCancel={() => onSetPagerScrollEnabled?.(true)}
         >
-          {causes.map((cause) => (
-            <Pressable
-              key={cause}
-              onPress={() => openStoriesForCause(cause)}
-              style={styles.causeFrame}
-            >
-              <Image
-                source={{ uri: CAUSE_IMAGES[cause] }}
-                style={styles.causeImage}
-              />
-              <LinearGradient
-                colors={['transparent', 'rgba(0,0,0,0.85)']}
-                style={styles.causeTextOverlay}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.causesContainer}
+            snapToInterval={CARD_WIDTH + Spacing.s}
+            decelerationRate="fast"
+            nestedScrollEnabled={true}
+          >
+            {causes.map((cause) => (
+              <Pressable
+                key={cause}
+                onPress={() => openStoriesForCause(cause)}
+                style={styles.causeFrame}
               >
-                <Text style={styles.causeTitleText} numberOfLines={2}>
-                  {cause}
-                </Text>
-              </LinearGradient>
-            </Pressable>
-          ))}
-        </ScrollView>
+                <Image
+                  source={{ uri: CAUSE_IMAGES[cause] }}
+                  style={styles.causeImage}
+                />
+                <LinearGradient
+                  colors={['transparent', 'rgba(0,0,0,0.85)']}
+                  style={styles.causeTextOverlay}
+                >
+                  <Text style={styles.causeTitleText} numberOfLines={2}>
+                    {cause}
+                  </Text>
+                </LinearGradient>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
 
         {/* ## Section 3: Micro-Volunteering Opportunity Card ## */}
         <Card
@@ -732,8 +747,8 @@ const styles = StyleSheet.create({
     marginVertical: Spacing.xs / 2,
   },
   causeFrame: {
-    width: 110,
-    height: 110,
+    width: CARD_WIDTH,
+    height: CARD_WIDTH,
     borderRadius: Shapes.rounded + 2,
     marginRight: Spacing.s,
     overflow: 'hidden',
