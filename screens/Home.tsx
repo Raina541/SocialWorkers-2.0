@@ -7,11 +7,14 @@ import {
   Dimensions,
   Pressable,
   Image,
-  Modal,
   ImageBackground,
   TextInput,
   Animated,
   Alert,
+  BackHandler,
+  Easing,
+  PanResponder,
+  Modal,
 } from 'react-native';
 import { Colors, Spacing, Typography, Shapes } from '../constants/Theme';
 import { Card } from '../components/Card';
@@ -75,8 +78,6 @@ export const Home: React.FC<HomeProps> = ({
   const [causes, setCauses] = useState<CauseType[]>([]);
   const [localOpportunities, setLocalOpportunities] = useState<Opportunity[]>([]);
   const [remoteOpportunities, setRemoteOpportunities] = useState<Opportunity[]>([]);
-  const [showMicroVolunteering, setShowMicroVolunteering] = useState(false);
-
   // Story state
   const [activeStoryCause, setActiveStoryCause] = useState<CauseType | null>(null);
   const [activeStories, setActiveStories] = useState<Story[]>([]);
@@ -85,8 +86,198 @@ export const Home: React.FC<HomeProps> = ({
   const storyTimerRef = useRef<any>(null);
 
   // Notifications
-  const [showNotifications, setShowNotifications] = useState(false);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(2);
+
+  // --- Custom Transition & Gesture Implementation ---
+  const isTransitioning = useRef(false);
+  const microVolunteeringAnim = useRef(new Animated.Value(0)).current;
+  const notificationsAnim = useRef(new Animated.Value(0)).current;
+
+  const [isMicroVolunteeringMounted, setIsMicroVolunteeringMounted] = useState(false);
+  const [isNotificationsMounted, setIsNotificationsMounted] = useState(false);
+
+  const openMicroVolunteering = () => {
+    if (isTransitioning.current) return;
+    isTransitioning.current = true;
+    setIsMicroVolunteeringMounted(true);
+    Animated.timing(microVolunteeringAnim, {
+      toValue: 1,
+      duration: 300,
+      easing: Easing.out(Easing.ease),
+      useNativeDriver: true,
+    }).start(() => {
+      isTransitioning.current = false;
+    });
+  };
+
+  const closeMicroVolunteering = () => {
+    if (isTransitioning.current) return;
+    isTransitioning.current = true;
+    Animated.timing(microVolunteeringAnim, {
+      toValue: 0,
+      duration: 300,
+      easing: Easing.out(Easing.ease),
+      useNativeDriver: true,
+    }).start(() => {
+      setIsMicroVolunteeringMounted(false);
+      isTransitioning.current = false;
+    });
+  };
+
+  const openNotifications = () => {
+    if (isTransitioning.current) return;
+    isTransitioning.current = true;
+    setIsNotificationsMounted(true);
+    Animated.timing(notificationsAnim, {
+      toValue: 1,
+      duration: 300,
+      easing: Easing.out(Easing.ease),
+      useNativeDriver: true,
+    }).start(() => {
+      isTransitioning.current = false;
+    });
+  };
+
+  const closeNotifications = () => {
+    if (isTransitioning.current) return;
+    isTransitioning.current = true;
+    Animated.timing(notificationsAnim, {
+      toValue: 0,
+      duration: 300,
+      easing: Easing.out(Easing.ease),
+      useNativeDriver: true,
+    }).start(() => {
+      setIsNotificationsMounted(false);
+      isTransitioning.current = false;
+    });
+  };
+
+  const microVolunteeringPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: (evt, gestureState) => {
+        return gestureState.x0 < 40 && !isTransitioning.current;
+      },
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        return gestureState.x0 < 40 && gestureState.dx > 10 && Math.abs(gestureState.dy) < Math.abs(gestureState.dx) && !isTransitioning.current;
+      },
+      onPanResponderGrant: (evt, gestureState) => {
+        microVolunteeringAnim.stopAnimation();
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        let progress = 1 - (gestureState.dx / screenWidth);
+        progress = Math.max(0, Math.min(1, progress));
+        microVolunteeringAnim.setValue(progress);
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        if (gestureState.dx > screenWidth * 0.3 || gestureState.vx > 0.5) {
+          isTransitioning.current = true;
+          Animated.timing(microVolunteeringAnim, {
+            toValue: 0,
+            duration: 250,
+            easing: Easing.out(Easing.ease),
+            useNativeDriver: true,
+          }).start(() => {
+            setIsMicroVolunteeringMounted(false);
+            isTransitioning.current = false;
+          });
+        } else {
+          isTransitioning.current = true;
+          Animated.timing(microVolunteeringAnim, {
+            toValue: 1,
+            duration: 200,
+            easing: Easing.out(Easing.ease),
+            useNativeDriver: true,
+          }).start(() => {
+            isTransitioning.current = false;
+          });
+        }
+      },
+      onPanResponderTerminate: (evt, gestureState) => {
+        isTransitioning.current = true;
+        Animated.timing(microVolunteeringAnim, {
+          toValue: 1,
+          duration: 200,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }).start(() => {
+          isTransitioning.current = false;
+        });
+      },
+    })
+  ).current;
+
+  const notificationsPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: (evt, gestureState) => {
+        return gestureState.x0 < 40 && !isTransitioning.current;
+      },
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        return gestureState.x0 < 40 && gestureState.dx > 10 && Math.abs(gestureState.dy) < Math.abs(gestureState.dx) && !isTransitioning.current;
+      },
+      onPanResponderGrant: (evt, gestureState) => {
+        notificationsAnim.stopAnimation();
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        let progress = 1 - (gestureState.dx / screenWidth);
+        progress = Math.max(0, Math.min(1, progress));
+        notificationsAnim.setValue(progress);
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        if (gestureState.dx > screenWidth * 0.3 || gestureState.vx > 0.5) {
+          isTransitioning.current = true;
+          Animated.timing(notificationsAnim, {
+            toValue: 0,
+            duration: 250,
+            easing: Easing.out(Easing.ease),
+            useNativeDriver: true,
+          }).start(() => {
+            setIsNotificationsMounted(false);
+            isTransitioning.current = false;
+          });
+        } else {
+          isTransitioning.current = true;
+          Animated.timing(notificationsAnim, {
+            toValue: 1,
+            duration: 200,
+            easing: Easing.out(Easing.ease),
+            useNativeDriver: true,
+          }).start(() => {
+            isTransitioning.current = false;
+          });
+        }
+      },
+      onPanResponderTerminate: (evt, gestureState) => {
+        isTransitioning.current = true;
+        Animated.timing(notificationsAnim, {
+          toValue: 1,
+          duration: 200,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }).start(() => {
+          isTransitioning.current = false;
+        });
+      },
+    })
+  ).current;
+
+  useEffect(() => {
+    const handleBackButton = () => {
+      if (isNotificationsMounted && !isTransitioning.current) {
+        closeNotifications();
+        return true;
+      }
+      if (isMicroVolunteeringMounted && !isTransitioning.current) {
+        closeMicroVolunteering();
+        return true;
+      }
+      return false;
+    };
+
+    const subscription = BackHandler.addEventListener('hardwareBackPress', handleBackButton);
+    return () => {
+      subscription.remove();
+    };
+  }, [isMicroVolunteeringMounted, isNotificationsMounted]);
 
   // Idea Threads state
   const [ideas, setIdeas] = useState<Idea[]>([
@@ -309,7 +500,7 @@ export const Home: React.FC<HomeProps> = ({
   };
 
   const handleNotificationPress = () => {
-    setShowNotifications(true);
+    openNotifications();
   };
 
   const handleOpportunityPress = (opp: Opportunity) => {
@@ -333,8 +524,20 @@ export const Home: React.FC<HomeProps> = ({
     );
   };
 
+  const mainTranslateX = Animated.add(
+    microVolunteeringAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0, -screenWidth * 0.15],
+    }),
+    notificationsAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0, -screenWidth * 0.15],
+    })
+  );
+
   return (
     <View style={[styles.container, { backgroundColor: themeColors.neutralBackground2 }]}>
+      <Animated.View style={{ flex: 1, transform: [{ translateX: mainTranslateX }] }}>
       
       {/* ## Section 1: Top Navigation ## */}
       <View style={[styles.topNav, { backgroundColor: themeColors.neutralBackground1, borderBottomColor: themeColors.neutralStroke2 }]}>
@@ -396,7 +599,7 @@ export const Home: React.FC<HomeProps> = ({
         {/* ## Section 3: Micro-Volunteering Opportunity Card ## */}
         <Card
           variant="Filled"
-          onPress={() => setShowMicroVolunteering(true)}
+          onPress={() => openMicroVolunteering()}
           isDarkMode={isDarkMode}
           style={[
             styles.microCard,
@@ -420,7 +623,7 @@ export const Home: React.FC<HomeProps> = ({
               </View>
               
               <Pressable
-                onPress={() => setShowMicroVolunteering(true)}
+                onPress={() => openMicroVolunteering()}
                 style={[
                   styles.microCtaButton,
                   { backgroundColor: themeColors.brandBackground }
@@ -577,22 +780,115 @@ export const Home: React.FC<HomeProps> = ({
         </View>
 
       </ScrollView>
+      </Animated.View>
 
-      {/* --- Overlay Modals --- */}
-
-      {/* Modal 1: Micro Volunteering Sheet */}
-      <Modal visible={showMicroVolunteering} animationType="slide">
-        <MicroVolunteering isDarkMode={isDarkMode} onBack={() => setShowMicroVolunteering(false)} />
-      </Modal>
-
-      {/* Modal 2: Notifications List */}
-      <Modal visible={showNotifications} animationType="slide">
-        <NotificationsScreen
-          isDarkMode={isDarkMode}
-          onBack={() => setShowNotifications(false)}
-          onUnreadCountChange={(count) => setUnreadNotificationsCount(count)}
+      {/* --- Dimming Overlays --- */}
+      {isMicroVolunteeringMounted && (
+        <Animated.View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              backgroundColor: '#000000',
+              opacity: microVolunteeringAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 0.08],
+              }),
+              zIndex: 98,
+            },
+          ]}
+          pointerEvents="none"
         />
-      </Modal>
+      )}
+
+      {isNotificationsMounted && (
+        <Animated.View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              backgroundColor: '#000000',
+              opacity: notificationsAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 0.08],
+              }),
+              zIndex: 98,
+            },
+          ]}
+          pointerEvents="none"
+        />
+      )}
+
+      {/* --- Custom Sliding Overlays --- */}
+      {isMicroVolunteeringMounted && (
+        <Animated.View
+          {...microVolunteeringPanResponder.panHandlers}
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              width: screenWidth,
+              height: screenHeight,
+              transform: [
+                {
+                  translateX: microVolunteeringAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [screenWidth, 0],
+                  }),
+                },
+              ],
+              opacity: microVolunteeringAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.9, 1.0],
+              }),
+              zIndex: 99,
+              backgroundColor: themeColors.neutralBackground1,
+              shadowColor: '#000',
+              shadowOffset: { width: -4, height: 0 },
+              shadowOpacity: 0.15,
+              shadowRadius: 10,
+              elevation: 16,
+            },
+          ]}
+        >
+          <MicroVolunteering isDarkMode={isDarkMode} onBack={closeMicroVolunteering} />
+        </Animated.View>
+      )}
+
+      {isNotificationsMounted && (
+        <Animated.View
+          {...notificationsPanResponder.panHandlers}
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              width: screenWidth,
+              height: screenHeight,
+              transform: [
+                {
+                  translateX: notificationsAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [screenWidth, 0],
+                  }),
+                },
+              ],
+              opacity: notificationsAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.9, 1.0],
+              }),
+              zIndex: 99,
+              backgroundColor: themeColors.neutralBackground1,
+              shadowColor: '#000',
+              shadowOffset: { width: -4, height: 0 },
+              shadowOpacity: 0.15,
+              shadowRadius: 10,
+              elevation: 16,
+            },
+          ]}
+        >
+          <NotificationsScreen
+            isDarkMode={isDarkMode}
+            onBack={closeNotifications}
+            onUnreadCountChange={(count) => setUnreadNotificationsCount(count)}
+          />
+        </Animated.View>
+      )}
 
       {/* Modal 3: Immersive Story Viewer */}
       {activeStoryCause && activeStories.length > 0 && (
@@ -710,7 +1006,7 @@ export const Home: React.FC<HomeProps> = ({
                     onPress={() => {
                       closeStories();
                       // Open micro-volunteering or scroll to opportunities
-                      setShowMicroVolunteering(true);
+                      openMicroVolunteering();
                     }}
                     style={styles.storyCtaButton}
                   >
