@@ -309,6 +309,8 @@ class PersonalizationManager {
 
   // --- Ideas and Social State Centralization ---
   private allowMentions = true;
+  private reduceMotion = false;
+  private hasSeenStoryCoachMark = false;
   private supportTapsCount = 0;
   private ideas: Idea[] = [
     {
@@ -409,6 +411,22 @@ class PersonalizationManager {
 
   public setAllowMentions(val: boolean) {
     this.allowMentions = val;
+  }
+
+  public getReduceMotion(): boolean {
+    return this.reduceMotion;
+  }
+
+  public setReduceMotion(val: boolean) {
+    this.reduceMotion = val;
+  }
+
+  public getHasSeenStoryCoachMark(): boolean {
+    return this.hasSeenStoryCoachMark;
+  }
+
+  public setHasSeenStoryCoachMark(val: boolean) {
+    this.hasSeenStoryCoachMark = val;
   }
 
   public getSupportTapsCount(): number {

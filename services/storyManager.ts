@@ -250,6 +250,8 @@ const MOCK_STORIES_DB: Record<CauseType, Story[]> = {
 
 class StoryManager {
   private lastReadIndexes: Record<CauseType, number> = {} as any;
+  private seenCauses: Record<CauseType, boolean> = {} as any;
+  private bookmarkedCauses: Record<CauseType, boolean> = {} as any;
   private lastRefreshTime: number = new Date().getTime();
 
   constructor() {
@@ -262,6 +264,8 @@ class StoryManager {
     ];
     causes.forEach(c => {
       this.lastReadIndexes[c] = 0;
+      this.seenCauses[c] = false;
+      this.bookmarkedCauses[c] = false;
     });
   }
 
@@ -286,6 +290,26 @@ class StoryManager {
     this.lastReadIndexes[cause] = clampedIndex;
   }
 
+  // Seen state management
+  public isCauseSeen(cause: CauseType): boolean {
+    return !!this.seenCauses[cause];
+  }
+
+  public markCauseSeen(cause: CauseType, seen: boolean) {
+    this.seenCauses[cause] = seen;
+  }
+
+  // Bookmark state management
+  public isCauseBookmarked(cause: CauseType): boolean {
+    return !!this.bookmarkedCauses[cause];
+  }
+
+  public toggleCauseBookmarked(cause: CauseType): boolean {
+    const current = !!this.bookmarkedCauses[cause];
+    this.bookmarkedCauses[cause] = !current;
+    return !current;
+  }
+
   // Weekly refresh logic: reset read indexes every 7 days
   private checkWeeklyRefresh() {
     const currentTime = new Date().getTime();
@@ -295,6 +319,7 @@ class StoryManager {
       console.log('7 Days passed: resetting story read states');
       (Object.keys(this.lastReadIndexes) as CauseType[]).forEach(c => {
         this.lastReadIndexes[c] = 0;
+        this.seenCauses[c] = false;
       });
       this.lastRefreshTime = currentTime;
     }
@@ -304,6 +329,8 @@ class StoryManager {
   public forceReset() {
     (Object.keys(this.lastReadIndexes) as CauseType[]).forEach(c => {
       this.lastReadIndexes[c] = 0;
+      this.seenCauses[c] = false;
+      this.bookmarkedCauses[c] = false;
     });
     this.lastRefreshTime = new Date().getTime();
   }

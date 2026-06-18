@@ -57,6 +57,8 @@ function MainLayout() {
     { name: 'Profile', activeIcon: 'person', inactiveIcon: 'person-outline' },
   ];
 
+  const [autoOpenCause, setAutoOpenCause] = useState<string | null>(null);
+
   // Fade animations for each tab page
   const fadeAnims = useRef([
     new Animated.Value(1), // Home
@@ -67,6 +69,12 @@ function MainLayout() {
   ]).current;
 
   const triggerFadeIn = (index: number) => {
+    // Reset other pages to 1 instantly, and animate the target page
+    fadeAnims.forEach((anim, idx) => {
+      if (idx !== index) {
+        anim.setValue(1);
+      }
+    });
     fadeAnims[index].setValue(0.3); // start from 0.3 for a smoother fade effect
     Animated.timing(fadeAnims[index], {
       toValue: 1.0,
@@ -125,6 +133,8 @@ function MainLayout() {
             isDarkMode={isDarkMode}
             onNavigateToTab={handleTabPress}
             onSetPagerScrollEnabled={setPagerScrollEnabled}
+            autoOpenCause={autoOpenCause}
+            onClearAutoOpenCause={() => setAutoOpenCause(null)}
           />
         </Animated.View>
         
@@ -146,6 +156,10 @@ function MainLayout() {
             onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
             presence={presence}
             onChangePresence={setPresence}
+            onViewCauseStories={(cause) => {
+              setAutoOpenCause(cause);
+              handleTabPress(0);
+            }}
           />
         </Animated.View>
       </ScrollView>

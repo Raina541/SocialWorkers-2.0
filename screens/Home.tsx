@@ -278,18 +278,48 @@ interface HomeProps {
   isDarkMode?: boolean;
   onNavigateToTab?: (index: number) => void;
   onSetPagerScrollEnabled?: (enabled: boolean) => void;
+  autoOpenCause?: string | null;
+  onClearAutoOpenCause?: () => void;
 }
 
 export const Home: React.FC<HomeProps> = ({
   isDarkMode = false,
   onNavigateToTab,
   onSetPagerScrollEnabled,
+  autoOpenCause,
+  onClearAutoOpenCause,
 }) => {
   const themeColors = isDarkMode ? Colors.dark : Colors.light;
   const isCompactScreen = screenWidth < 380;
 
   // --- State management ---
   const [causes, setCauses] = useState<CauseType[]>([]);
+
+  useEffect(() => {
+    if (autoOpenCause) {
+      openStoriesForCause(autoOpenCause as CauseType);
+      onClearAutoOpenCause?.();
+    }
+  }, [autoOpenCause]);
+
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(rotateAnim, {
+        toValue: 1,
+        duration: 8000,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
+
+  const rotateStr = rotateAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
   const [localOpportunities, setLocalOpportunities] = useState<Opportunity[]>([]);
   const [remoteOpportunities, setRemoteOpportunities] = useState<Opportunity[]>([]);
   // Story state
@@ -298,6 +328,118 @@ export const Home: React.FC<HomeProps> = ({
   const [storyIndex, setStoryIndex] = useState(0);
   const storyProgress = useRef(new Animated.Value(0)).current;
   const storyTimerRef = useRef<any>(null);
+
+  const storyViewerAnim = useRef(new Animated.Value(0)).current;
+  const storyPanY = useRef(new Animated.Value(0)).current;
+  const [showStoryCoachMark, setShowStoryCoachMark] = useState(false);
+  const [causeSupportState, setCauseSupportState] = useState<Record<CauseType, { supported: boolean; count: number }>>(() => {
+    const initial: any = {};
+    const causesList: CauseType[] = [
+      'Education', 'Healthcare', 'Child Welfare', 'Poverty Alleviation & Livelihoods',
+      'Women Empowerment', 'Disaster Relief', 'Environment & Sustainability', 'Animal Welfare',
+      'Support for Persons with Disabilities', 'Elderly Care', 'Water, Sanitation, and Hygiene (WASH)',
+      'Rural Development'
+    ];
+    causesList.forEach(c => {
+      initial[c] = { supported: false, count: 28 + Math.floor((c.charCodeAt(0) + c.charCodeAt(1)) % 30) };
+    });
+    return initial;
+  });
+  
+  const [causeBookmarkState, setCauseBookmarkState] = useState<Record<CauseType, boolean>>(() => {
+    const initial: any = {};
+    const causesList: CauseType[] = [
+      'Education', 'Healthcare', 'Child Welfare', 'Poverty Alleviation & Livelihoods',
+      'Women Empowerment', 'Disaster Relief', 'Environment & Sustainability', 'Animal Welfare',
+      'Support for Persons with Disabilities', 'Elderly Care', 'Water, Sanitation, and Hygiene (WASH)',
+      'Rural Development'
+    ];
+    causesList.forEach(c => {
+      initial[c] = false;
+    });
+    return initial;
+  });
+
+  const pausedValueRef = useRef(0);
+  const isPausedRef = useRef(false);
+
+  // CTA Pulse Animation
+  const ctaPulseAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    let loop: any = null;
+    if (activeStoryCause && activeStories.length > 0 && storyIndex === activeStories.length - 1) {
+      ctaPulseAnim.setValue(0);
+      loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(ctaPulseAnim, {
+            toValue: 1,
+            duration: 1000,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(ctaPulseAnim, {
+            toValue: 0,
+            duration: 1000,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      loop.start();
+    } else {
+      ctaPulseAnim.setValue(0);
+    }
+    return () => {
+      if (loop) loop.stop();
+    };
+  }, [storyIndex, activeStoryCause, activeStories.length]);
+
+  const ctaScale = ctaPulseAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.03],
+  });
+
+  // Swipe-down to close PanResponder
+  const storyPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        return gestureState.dy > 10 && Math.abs(gestureState.dx) < gestureState.dy;
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        if (gestureState.dy > 0) {
+          storyPanY.setValue(gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        if (gestureState.dy > 120 || gestureState.vy > 0.5) {
+          Animated.timing(storyPanY, {
+            toValue: screenHeight,
+            duration: 250,
+            useNativeDriver: true,
+          }).start(() => {
+            setActiveStoryCause(null);
+            setActiveStories([]);
+            storyPanY.setValue(0);
+            storyViewerAnim.setValue(0);
+          });
+        } else {
+          Animated.spring(storyPanY, {
+            toValue: 0,
+            tension: 45,
+            friction: 7,
+            useNativeDriver: true,
+          }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(storyPanY, {
+          toValue: 0,
+          useNativeDriver: true,
+        }).start();
+      },
+    })
+  ).current;
 
   // Notifications
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(
@@ -681,6 +823,31 @@ export const Home: React.FC<HomeProps> = ({
     setActiveStoryCause(cause);
     setActiveStories(stories);
     setStoryIndex(lastIndex);
+    
+    // Sync bookmark state
+    setCauseBookmarkState(prev => ({
+      ...prev,
+      [cause]: StoryService.isCauseBookmarked(cause)
+    }));
+
+    // Trigger coach mark if it's the first time
+    if (!Personalization.getHasSeenStoryCoachMark()) {
+      setShowStoryCoachMark(true);
+      Personalization.setHasSeenStoryCoachMark(true);
+      setTimeout(() => {
+        setShowStoryCoachMark(false);
+      }, 3000);
+    }
+
+    // Zoom/Spring scale open transition
+    storyPanY.setValue(0);
+    storyViewerAnim.setValue(0);
+    Animated.spring(storyViewerAnim, {
+      toValue: 1,
+      tension: 40,
+      friction: 7,
+      useNativeDriver: true,
+    }).start();
   };
 
   useEffect(() => {
@@ -695,14 +862,21 @@ export const Home: React.FC<HomeProps> = ({
   const startStoryTimer = () => {
     stopStoryTimer();
     storyProgress.setValue(0);
-    
+    isPausedRef.current = false;
+
+    const reduceMotion = Personalization.getReduceMotion();
+    if (reduceMotion) {
+      // Do not auto-advance if reduced motion is enabled
+      return;
+    }
+
     // Auto-advance after 7 seconds
     Animated.timing(storyProgress, {
       toValue: 1,
       duration: 7000,
       useNativeDriver: false,
     }).start(({ finished }) => {
-      if (finished) {
+      if (finished && !isPausedRef.current) {
         handleStoryNext();
       }
     });
@@ -716,49 +890,172 @@ export const Home: React.FC<HomeProps> = ({
   };
 
   const handleStoryNext = () => {
+    if (!activeStoryCause) return;
+
     if (storyIndex < activeStories.length - 1) {
       const nextIdx = storyIndex + 1;
       setStoryIndex(nextIdx);
-      if (activeStoryCause) {
-        StoryService.saveProgress(activeStoryCause, nextIdx);
-      }
+      StoryService.saveProgress(activeStoryCause, nextIdx);
     } else {
       // Completed all stories in cause (Positive signal)
-      if (activeStoryCause) {
-        Personalization.recordSignal(activeStoryCause, 'CompleteStory');
-        // Close modal
+      Personalization.recordSignal(activeStoryCause, 'CompleteStory');
+      StoryService.markCauseSeen(activeStoryCause, true);
+
+      // Auto-advance to the next cause
+      const currentIdx = causes.indexOf(activeStoryCause);
+      const nextIdx = currentIdx + 1;
+      if (nextIdx < causes.length) {
+        const nextCause = causes[nextIdx];
+        const nextStories = StoryService.getStories(nextCause);
+        
+        // Brief scale reset transition for next cause
+        storyViewerAnim.setValue(0.9);
+        Animated.spring(storyViewerAnim, {
+          toValue: 1,
+          tension: 50,
+          friction: 7,
+          useNativeDriver: true,
+          }).start();
+
+        setActiveStoryCause(nextCause);
+        setActiveStories(nextStories);
+        setStoryIndex(0);
+        setCauseBookmarkState(prev => ({
+          ...prev,
+          [nextCause]: StoryService.isCauseBookmarked(nextCause)
+        }));
+      } else {
+        // No more causes, close
         closeStories();
       }
     }
   };
 
   const handleStoryPrev = () => {
+    if (!activeStoryCause) return;
+
     if (storyIndex > 0) {
       const prevIdx = storyIndex - 1;
       setStoryIndex(prevIdx);
-      if (activeStoryCause) {
-        StoryService.saveProgress(activeStoryCause, prevIdx);
+      StoryService.saveProgress(activeStoryCause, prevIdx);
+    } else {
+      // Go back to the previous cause's last story
+      const currentIdx = causes.indexOf(activeStoryCause);
+      const prevIdx = currentIdx - 1;
+      if (prevIdx >= 0) {
+        const prevCause = causes[prevIdx];
+        const prevStories = StoryService.getStories(prevCause);
+
+        // Brief scale reset transition
+        storyViewerAnim.setValue(0.9);
+        Animated.spring(storyViewerAnim, {
+          toValue: 1,
+          tension: 50,
+          friction: 7,
+          useNativeDriver: true,
+        }).start();
+
+        setActiveStoryCause(prevCause);
+        setActiveStories(prevStories);
+        setStoryIndex(prevStories.length - 1);
+        setCauseBookmarkState(prev => ({
+          ...prev,
+          [prevCause]: StoryService.isCauseBookmarked(prevCause)
+        }));
       }
     }
   };
 
   const closeStories = () => {
-    setActiveStoryCause(null);
-    setActiveStories([]);
-    loadPersonalizedData(); // Re-rank dynamically based on story completion signals
+    if (!activeStoryCause) return;
+    
+    // Mark cause as seen when closed
+    StoryService.markCauseSeen(activeStoryCause, true);
+
+    Animated.timing(storyViewerAnim, {
+      toValue: 0,
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => {
+      setActiveStoryCause(null);
+      setActiveStories([]);
+      loadPersonalizedData(); // Re-rank dynamically based on seen states
+    });
   };
 
-  // Switch cause inside story viewer (horizontal swipe simulation)
-  const changeStoryCause = (direction: 'left' | 'right') => {
+  const handleStoryPressIn = () => {
+    isPausedRef.current = true;
+    storyProgress.stopAnimation((value) => {
+      pausedValueRef.current = value;
+    });
+  };
+
+  const handleStoryPressOut = () => {
+    isPausedRef.current = false;
+    const remainingTime = 7000 * (1 - pausedValueRef.current);
+
+    const reduceMotion = Personalization.getReduceMotion();
+    if (reduceMotion) return;
+
+    Animated.timing(storyProgress, {
+      toValue: 1,
+      duration: remainingTime,
+      useNativeDriver: false,
+    }).start(({ finished }) => {
+      if (finished && !isPausedRef.current) {
+        handleStoryNext();
+      }
+    });
+  };
+
+  const handleToggleBookmarkStory = () => {
     if (!activeStoryCause) return;
-    const currentIndex = causes.indexOf(activeStoryCause);
-    let newIndex = currentIndex + (direction === 'left' ? -1 : 1);
+    const isBookmarkedNow = StoryService.toggleCauseBookmarked(activeStoryCause);
+    setCauseBookmarkState(prev => ({ ...prev, [activeStoryCause]: isBookmarkedNow }));
     
-    if (newIndex >= 0 && newIndex < causes.length) {
-      // Record skip signal for skipped cause
-      Personalization.recordSignal(activeStoryCause, 'SkipStory');
-      openStoriesForCause(causes[newIndex]);
+    showToast(
+      isBookmarkedNow ? `Saved "${activeStoryCause}"` : `Removed "${activeStoryCause}"`,
+      () => {
+        const reverted = StoryService.toggleCauseBookmarked(activeStoryCause);
+        setCauseBookmarkState(prev => ({ ...prev, [activeStoryCause]: reverted }));
+      }
+    );
+  };
+
+  const handleSupportCause = () => {
+    if (!activeStoryCause) return;
+    const current = causeSupportState[activeStoryCause];
+    const newSupported = !current.supported;
+    const newCount = current.count + (newSupported ? 1 : -1);
+    
+    setCauseSupportState(prev => ({
+      ...prev,
+      [activeStoryCause]: { supported: newSupported, count: newCount }
+    }));
+
+    if (newSupported) {
+      Personalization.recordSignal(activeStoryCause, 'Support');
     }
+  };
+
+  const getStoryImpactText = (story: Story, cause: CauseType) => {
+    if (story.id === 'child_1') return "14 children helped • 5 volunteers";
+    if (story.id === 'edu_1') return "4,500 children helped • 4 volunteers";
+    if (story.id === 'edu_2') return "80 children helped • 12 volunteers";
+    if (story.id === 'edu_3') return "12 settlements reached • 3 volunteers";
+    if (story.id === 'health_1') return "250 patients helped • 8 volunteers";
+    if (story.id === 'pov_1') return "120 families supported • 18 volunteers";
+    if (story.id === 'women_1') return "400 women trained • 6 volunteers";
+    if (story.id === 'disaster_1') return "200 family units assisted • 22 volunteers";
+    if (story.id === 'env_1') return "3,500 trees planted • 38 volunteers";
+    if (story.id === 'env_2') return "18 village wells built • 14 volunteers";
+    if (story.id === 'animal_1') return "180 stray animals collars fitted • 9 volunteers";
+    if (story.id === 'disability_1') return "120 audiobooks recorded • 15 volunteers";
+    if (story.id === 'elder_1') return "60 elderly residents assisted • 20 volunteers";
+    if (story.id === 'wash_1') return "70 biosand filters installed • 7 volunteers";
+    if (story.id === 'rural_1') return "350 crop varieties preserved • 11 volunteers";
+    
+    return `${story.contributorsCount * 5 || 15} helped • ${story.contributorsCount || 4} volunteers`;
   };
 
   // --- Ideas Functions ---
@@ -942,6 +1239,14 @@ export const Home: React.FC<HomeProps> = ({
     }
   }, [debouncedSearchQuery, isLoadingPickerResults, pickerIdeaId, recentFriends.length, allFriendsFiltered.length]);
 
+  const storyTranslateY = Animated.add(
+    storyPanY,
+    storyViewerAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [300, 0],
+    })
+  );
+
   return (
     <View style={[styles.container, { backgroundColor: themeColors.neutralBackground2 }]}>
       <Animated.View style={{ flex: 1, transform: [{ translateX: mainTranslateX }] }}>
@@ -976,30 +1281,117 @@ export const Home: React.FC<HomeProps> = ({
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.causesContainer}
-            snapToInterval={CARD_WIDTH + Spacing.s}
+            snapToInterval={92}
             decelerationRate="fast"
             nestedScrollEnabled={true}
           >
-            {causes.map((cause) => (
-              <Pressable
-                key={cause}
-                onPress={() => openStoriesForCause(cause)}
-                style={styles.causeFrame}
-              >
-                <Image
-                  source={{ uri: CAUSE_IMAGES[cause] }}
-                  style={styles.causeImage}
-                />
-                <LinearGradient
-                  colors={['transparent', 'rgba(0,0,0,0.85)']}
-                  style={styles.causeTextOverlay}
+            {causes.map((cause) => {
+              const isSeen = StoryService.isCauseSeen(cause);
+              return (
+                <Pressable
+                  key={cause}
+                  onPress={() => openStoriesForCause(cause)}
+                  style={{ alignItems: 'center', width: 80, marginRight: 12 }}
                 >
-                  <Text style={styles.causeTitleText} numberOfLines={2}>
+                  {isSeen ? (
+                    /* Seen State Ring */
+                    <View
+                      style={{
+                        width: 72,
+                        height: 72,
+                        borderRadius: 36,
+                        borderWidth: 2,
+                        borderColor: themeColors.neutralStroke2,
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <Image
+                        source={{ uri: CAUSE_IMAGES[cause] }}
+                        style={{ width: 62, height: 62, borderRadius: 31, opacity: 0.65 }}
+                      />
+                    </View>
+                  ) : (
+                    /* Unseen State Ring with Rotating Gradient and play badge */
+                    <View style={{ width: 72, height: 72, justifyContent: 'center', alignItems: 'center' }}>
+                      <Animated.View
+                        style={{
+                          position: 'absolute',
+                          width: 72,
+                          height: 72,
+                          borderRadius: 36,
+                          overflow: 'hidden',
+                          transform: [{ rotate: rotateStr }],
+                        }}
+                      >
+                        <LinearGradient
+                          colors={['#0f6cbd', '#8660a9', '#d86109', '#0f6cbd']}
+                          style={{ flex: 1 }}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                        />
+                      </Animated.View>
+                      <View
+                        style={{
+                          width: 66,
+                          height: 66,
+                          borderRadius: 33,
+                          backgroundColor: themeColors.neutralBackground1,
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                          zIndex: 1,
+                        }}
+                      >
+                        <Image
+                          source={{ uri: CAUSE_IMAGES[cause] }}
+                          style={{ width: 60, height: 60, borderRadius: 30 }}
+                        />
+                      </View>
+                      {/* Play Badge */}
+                      <View
+                        style={{
+                          position: 'absolute',
+                          bottom: 0,
+                          right: 0,
+                          width: 18,
+                          height: 18,
+                          borderRadius: 9,
+                          backgroundColor: themeColors.neutralBackground1,
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                          borderWidth: 1.5,
+                          borderColor: themeColors.neutralBackground1,
+                          shadowColor: '#000',
+                          shadowOffset: { width: 0, height: 1 },
+                          shadowOpacity: 0.2,
+                          shadowRadius: 1.5,
+                          elevation: 2,
+                          zIndex: 2,
+                        }}
+                      >
+                        <Ionicons name="play" size={8} color={themeColors.brandForeground1} style={{ marginLeft: 1 }} />
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Label below the circle */}
+                  <Text
+                    style={{
+                      marginTop: 6,
+                      fontSize: 11,
+                      fontWeight: '500',
+                      color: themeColors.neutralForeground2,
+                      textAlign: 'center',
+                      lineHeight: 14,
+                      height: 28,
+                    }}
+                    numberOfLines={2}
+                  >
                     {cause}
                   </Text>
-                </LinearGradient>
-              </Pressable>
-            ))}
+                </Pressable>
+              );
+            })}
           </ScrollView>
         </View>
 
@@ -1377,27 +1769,59 @@ export const Home: React.FC<HomeProps> = ({
 
       {/* Modal 3: Immersive Story Viewer */}
       {activeStoryCause && activeStories.length > 0 && (
-        <Modal visible={true} transparent={false} animationType="fade">
-          <View style={styles.storyContainer}>
-            
-            {/* Story Image background */}
-            <ImageBackground
-              source={{ uri: activeStories[storyIndex].imageUri }}
-              style={styles.storyBgImage}
-              resizeMode="cover"
-            >
-              <LinearGradient
-                colors={['rgba(0,0,0,0.6)', 'transparent', 'rgba(0,0,0,0.95)']}
-                style={styles.storyGradient}
-              >
-                
-                {/* 1. Progress indicators at top */}
-                <View style={styles.storyProgressRow}>
-                  {activeStories.map((s, idx) => {
-                    let progressWidth: any = '0%';
-                    if (idx < storyIndex) progressWidth = '100%';
-                    if (idx === storyIndex) {
-                      // Bind animated progress
+        <Animated.View
+          {...storyPanResponder.panHandlers}
+          style={[
+            styles.storyContainer,
+            {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 100,
+              opacity: storyViewerAnim,
+              transform: [
+                { scale: storyViewerAnim },
+                { translateY: storyTranslateY }
+              ],
+            }
+          ]}
+        >
+          {/* Top dark gradient overlay for legibility */}
+          <LinearGradient
+            colors={['rgba(0,0,0,0.65)', 'transparent']}
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 110, zIndex: 10 }}
+            pointerEvents="none"
+          />
+
+          {/* Bottom dark gradient overlay for text readability */}
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.85)']}
+            style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 420, zIndex: 5 }}
+            pointerEvents="none"
+          />
+
+          {/* Story Image background */}
+          <ImageBackground
+            source={{ uri: activeStories[storyIndex].imageUri }}
+            style={styles.storyBgImage}
+            resizeMode="cover"
+            accessibilityLabel={`${activeStories[storyIndex].headline}. ${activeStories[storyIndex].summary}. Source: ${activeStories[storyIndex].sourceName}. ${getStoryImpactText(activeStories[storyIndex], activeStoryCause)}.`}
+            accessibilityRole="image"
+          >
+            <View style={[styles.storyGradient, { flex: 1, zIndex: 8 }]}>
+              
+              {/* 1. Progress indicators at top */}
+              <View style={styles.storyProgressRow}>
+                {activeStories.map((s, idx) => {
+                  let progressWidth: any = '0%';
+                  if (idx < storyIndex) progressWidth = '100%';
+                  if (idx === storyIndex) {
+                    const reduceMotion = Personalization.getReduceMotion();
+                    if (reduceMotion) {
+                      progressWidth = '5%';
+                    } else {
                       return (
                         <View key={s.id} style={styles.storyProgressTrack}>
                           <Animated.View
@@ -1414,98 +1838,180 @@ export const Home: React.FC<HomeProps> = ({
                         </View>
                       );
                     }
-                    return (
-                      <View key={s.id} style={styles.storyProgressTrack}>
-                        <View style={[styles.storyProgressFill, { width: progressWidth }]} />
-                      </View>
-                    );
-                  })}
+                  }
+                  return (
+                    <View key={s.id} style={styles.storyProgressTrack}>
+                      <View style={[styles.storyProgressFill, { width: progressWidth }]} />
+                    </View>
+                  );
+                })}
+              </View>
+
+              {/* 2. Top Header (Logo/Title on Left, Bookmark & Close on Right) */}
+              <View style={styles.storyHeader}>
+                {/* Cause Image logo + Name */}
+                <View style={styles.storyCauseBox}>
+                  <Image source={{ uri: CAUSE_IMAGES[activeStoryCause] }} style={styles.storyCauseLogo} />
+                  <Text style={styles.storyCauseName}>{activeStoryCause}</Text>
                 </View>
 
-                {/* 2. Top-left Header */}
-                <View style={styles.storyHeader}>
-                  <Pressable onPress={handleStoryPrev} style={styles.storyHeaderNav}>
-                    <Ionicons name="chevron-back" size={24} color="#ffffff" />
+                {/* Header Action Buttons */}
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Pressable
+                    onPress={handleToggleBookmarkStory}
+                    style={{ padding: 6, marginRight: 8 }}
+                    accessibilityLabel={causeBookmarkState[activeStoryCause] ? "Remove bookmark" : "Bookmark this cause"}
+                    accessibilityRole="button"
+                  >
+                    <Ionicons
+                      name={causeBookmarkState[activeStoryCause] ? "bookmark" : "bookmark-outline"}
+                      size={22}
+                      color={causeBookmarkState[activeStoryCause] ? themeColors.brandForeground1 : "#ffffff"}
+                    />
                   </Pressable>
-                  
-                  {/* Cause Image logo + Name */}
-                  <View style={styles.storyCauseBox}>
-                    <Image source={{ uri: CAUSE_IMAGES[activeStoryCause] }} style={styles.storyCauseLogo} />
-                    <Text style={styles.storyCauseName}>{activeStoryCause}</Text>
-                  </View>
-
-                  <Pressable onPress={closeStories} style={styles.storyCloseButton}>
+                  <Pressable
+                    onPress={closeStories}
+                    style={styles.storyCloseButton}
+                    accessibilityLabel="Close stories"
+                    accessibilityRole="button"
+                  >
                     <Ionicons name="close" size={24} color="#ffffff" />
                   </Pressable>
                 </View>
+              </View>
 
-                {/* Left/Right click detectors */}
-                <View style={styles.storyClickRow}>
-                  <Pressable style={styles.storyLeftClick} onPress={handleStoryPrev} />
-                  <Pressable style={styles.storyRightClick} onPress={handleStoryNext} />
+              {/* Tapping Overlay Click Zones (Hold to pause, Tap to skip) */}
+              <Pressable
+                onPressIn={handleStoryPressIn}
+                onPressOut={handleStoryPressOut}
+                onPress={(evt) => {
+                  const pageX = evt.nativeEvent.pageX;
+                  if (pageX < screenWidth * 0.3) {
+                    handleStoryPrev();
+                  } else {
+                    handleStoryNext();
+                  }
+                }}
+                style={StyleSheet.absoluteFill}
+              />
+
+              {/* First-run Coach Mark */}
+              {showStoryCoachMark && (
+                <View
+                  style={{
+                    position: 'absolute',
+                    top: 100,
+                    left: Spacing.m,
+                    right: Spacing.m,
+                    backgroundColor: 'rgba(0,0,0,0.75)',
+                    paddingVertical: 8,
+                    paddingHorizontal: 12,
+                    borderRadius: 8,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 25,
+                  }}
+                  pointerEvents="none"
+                >
+                  <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: '500' }}>
+                    💡 Tap left/right to skip • Hold to pause
+                  </Text>
                 </View>
+              )}
 
-                {/* 3. Lower content Area */}
-                <View style={styles.storyContentArea}>
-                  
-                  {/* Headline */}
-                  <Text style={styles.storyHeadline}>
-                    {activeStories[storyIndex].headline}
-                  </Text>
+              {/* 3. Lower content Area */}
+              <View style={[styles.storyContentArea, { zIndex: 12 }]}>
+                
+                {/* Headline */}
+                <Text style={styles.storyHeadline}>
+                  {activeStories[storyIndex].headline}
+                </Text>
 
-                  {/* AI Summary */}
-                  <Text style={styles.storySummary}>
-                    {activeStories[storyIndex].summary}
-                  </Text>
+                {/* AI Summary */}
+                <Text style={styles.storySummary}>
+                  {activeStories[storyIndex].summary}
+                </Text>
 
-                  {/* Source citation */}
-                  <Text style={styles.storySource}>
-                    Source: {activeStories[storyIndex].sourceName} • {activeStories[storyIndex].timestamp}
-                  </Text>
+                {/* Source citation */}
+                <Text style={styles.storySource}>
+                  Source: {activeStories[storyIndex].sourceName} • {activeStories[storyIndex].timestamp}
+                </Text>
 
-                  {/* Contributors */}
+                {/* Contributors & Clarified Metrics */}
+                <View style={styles.storySocialRow}>
                   {activeStories[storyIndex].contributorsCount > 0 && (
-                    <View style={styles.storySocialRow}>
-                      <View style={styles.storyAvatarsStack}>
-                        {activeStories[storyIndex].contributorsAvatars.map((url, i) => (
-                          <Image
-                            key={url}
-                            source={{ uri: url }}
-                            style={[styles.storyAvatarItem, { marginLeft: i === 0 ? 0 : -8 }]}
-                          />
-                        ))}
-                      </View>
-                      <Text style={styles.storyContributorText}>
-                        {activeStories[storyIndex].contributorsCount} participants impacted
-                      </Text>
+                    <View style={styles.storyAvatarsStack}>
+                      {activeStories[storyIndex].contributorsAvatars.slice(0, 3).map((url, i) => (
+                        <Image
+                          key={url}
+                          source={{ uri: url }}
+                          style={[styles.storyAvatarItem, { marginLeft: i === 0 ? 0 : -8 }]}
+                        />
+                      ))}
                     </View>
                   )}
-
-                  {/* Swipe down / exit helper */}
-                  <Text style={styles.storyExitHelper}>
-                    Swipe down or press X to exit story
+                  <Text style={styles.storyContributorText}>
+                    {getStoryImpactText(activeStories[storyIndex], activeStoryCause)}
                   </Text>
+                </View>
 
-                  {/* Persistent call-to-action button */}
+                {/* Persistent CTA and Support Row */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: Spacing.s }}>
+                  
+                  {/* Primary CTA button (Gentle pulsing on last slide) */}
+                  <Animated.View style={{ flex: 1, transform: (storyIndex === activeStories.length - 1) ? [{ scale: ctaScale }] : [] }}>
+                    <Pressable
+                      onPress={() => {
+                        closeStories();
+                        openMicroVolunteering();
+                      }}
+                      style={[styles.storyCtaButton, { backgroundColor: '#0f6cbd', height: 48, borderRadius: Shapes.rounded, justifyContent: 'center', alignItems: 'center' }]}
+                    >
+                      <Text style={styles.storyCtaButtonText}>Help with this cause</Text>
+                    </Pressable>
+                  </Animated.View>
+
+                  {/* Secondary Support Action Pill Button */}
                   <Pressable
-                    onPress={() => {
-                      closeStories();
-                      // Open micro-volunteering or scroll to opportunities
-                      openMicroVolunteering();
+                    onPress={handleSupportCause}
+                    style={{
+                      marginLeft: Spacing.s,
+                      height: 48,
+                      borderRadius: Shapes.rounded,
+                      borderWidth: 1.5,
+                      borderColor: causeSupportState[activeStoryCause]?.supported ? 'transparent' : '#ffffff',
+                      backgroundColor: causeSupportState[activeStoryCause]?.supported ? themeColors.brandBackgroundSubtle : 'transparent',
+                      paddingHorizontal: Spacing.m,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      minWidth: 80,
                     }}
-                    style={styles.storyCtaButton}
                   >
-                    <Text style={styles.storyCtaButtonText}>
-                      Find opportunities to help with {activeStoryCause}
+                    <Ionicons
+                      name={causeSupportState[activeStoryCause]?.supported ? "heart" : "heart-outline"}
+                      size={20}
+                      color={causeSupportState[activeStoryCause]?.supported ? themeColors.brandForeground1 : "#ffffff"}
+                    />
+                    <Text
+                      style={{
+                        color: causeSupportState[activeStoryCause]?.supported ? themeColors.brandForeground1 : "#ffffff",
+                        fontWeight: '600',
+                        fontSize: 14,
+                        marginLeft: 6,
+                      }}
+                    >
+                      {causeSupportState[activeStoryCause]?.count || 0}
                     </Text>
                   </Pressable>
 
                 </View>
 
-              </LinearGradient>
-            </ImageBackground>
-          </View>
-        </Modal>
+              </View>
+
+            </View>
+          </ImageBackground>
+        </Animated.View>
       )}
 
       {/* Friend Picker Bottom Sheet Modal */}
