@@ -43,7 +43,12 @@ export const OpportunityCard: React.FC<OpportunityCardProps> = ({
         <View style={[styles.chip, { backgroundColor: isDarkMode ? '#292929' : '#f0f0f0' }]}>
           <Ionicons name="location-outline" size={14} color={themeColors.neutralForeground3} style={styles.chipIcon} />
           <Text style={[styles.chipText, { color: themeColors.neutralForeground2 }]} numberOfLines={1}>
-            {opportunity.locationName}
+            {opportunity.isRemote
+              ? 'Remote'
+              : opportunity.distanceKm > 5
+                ? `${opportunity.locationName} (${Math.round(opportunity.distanceKm)} km away)`
+                : opportunity.locationName
+            }
           </Text>
         </View>
       </View>

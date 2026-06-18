@@ -76,7 +76,6 @@ export const Home: React.FC<HomeProps> = ({
   const [localOpportunities, setLocalOpportunities] = useState<Opportunity[]>([]);
   const [remoteOpportunities, setRemoteOpportunities] = useState<Opportunity[]>([]);
   const [showMicroVolunteering, setShowMicroVolunteering] = useState(false);
-  const [radiusFilter, setRadiusFilter] = useState<'Auto' | '5km' | '25km' | '50km' | '100km'>('Auto');
 
   // Story state
   const [activeStoryCause, setActiveStoryCause] = useState<CauseType | null>(null);
@@ -123,13 +122,57 @@ export const Home: React.FC<HomeProps> = ({
     const allOpps = Personalization.getRawOpportunities();
     const rankedOpps = Personalization.rankOpportunities(allOpps);
 
-    // 3. Filter local opportunities (Gwalior) based on fallback logic
-    if (radiusFilter === 'Auto') {
-      setLocalOpportunities(Personalization.getFilteredLocalOpportunities(rankedOpps));
-    } else {
-      const radiusKm = parseInt(radiusFilter.replace('km', ''));
-      setLocalOpportunities(rankedOpps.filter(o => !o.isRemote && o.distanceKm <= radiusKm));
+    // 3. Filter local opportunities (Gwalior) based on dynamic search radius expansion
+    const candidates = rankedOpps.filter(opp => {
+      if (opp.isRemote) {
+        // Only keep remote opportunities that match the user's city/location
+        return (
+          opp.organizationName.toLowerCase().includes('gwalior') ||
+          opp.locationName.toLowerCase().includes('gwalior') ||
+          opp.title.toLowerCase().includes('gwalior')
+        );
+      }
+      return true;
+    });
+
+    let finalOpps: Opportunity[] = [];
+    const tiers = [5, 25, 50, 100];
+    for (const radius of tiers) {
+      const matchedLocal = candidates.filter(o => !o.isRemote && o.distanceKm <= radius);
+      if (matchedLocal.length >= 5) {
+        finalOpps = matchedLocal;
+        break;
+      }
+      finalOpps = matchedLocal;
     }
+
+    // If still less than 5 opportunities after all local search levels, add allowed remote opportunities
+    if (finalOpps.length < 5) {
+      const matchedRemote = candidates.filter(o => o.isRemote);
+      // Append unique remote items
+      finalOpps = [...finalOpps, ...matchedRemote.filter(ro => !finalOpps.some(fo => fo.id === ro.id))];
+    }
+
+    // Sort according to Recommendation Priority Order:
+    // 1. Local (<=5km)
+    // 2. Nearby (>5km)
+    // 3. Remote
+    finalOpps.sort((a, b) => {
+      const getPriority = (o: Opportunity) => {
+        if (o.isRemote) return 3;
+        if (o.distanceKm <= 5) return 1;
+        return 2;
+      };
+      const priorityA = getPriority(a);
+      const priorityB = getPriority(b);
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+      // If priorities are equal, preserve the original ranked order
+      return rankedOpps.indexOf(a) - rankedOpps.indexOf(b);
+    });
+
+    setLocalOpportunities(finalOpps);
 
     // 4. Remote opportunities
     setRemoteOpportunities(rankedOpps.filter(o => o.isRemote));
@@ -137,7 +180,7 @@ export const Home: React.FC<HomeProps> = ({
 
   useEffect(() => {
     loadPersonalizedData();
-  }, [radiusFilter]);
+  }, []);
 
   // --- Story Functions ---
   const openStoriesForCause = (cause: CauseType) => {
@@ -402,56 +445,28 @@ export const Home: React.FC<HomeProps> = ({
         </Card>
 
         {/* ## Section 4: Location-Based Opportunities ## */}
-        <View style={styles.locationHeaderRow}>
-          <Text style={[Typography.bodyStrong, { color: themeColors.neutralForeground1 }]}>
-            Opportunities in Gwalior
-          </Text>
-          
-          {/* Radius toggle simulation */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.radiusRow}>
-            {(['Auto', '5km', '25km', '50km', '100km'] as const).map(r => (
-              <Pressable
-                key={r}
-                onPress={() => setRadiusFilter(r)}
-                style={[
-                  styles.radiusChip,
-                  {
-                    backgroundColor: radiusFilter === r ? themeColors.brandForeground1 : themeColors.neutralBackground3,
-                  }
-                ]}
-              >
-                <Text
-                  style={{
-                    color: radiusFilter === r ? '#ffffff' : themeColors.neutralForeground1,
-                    fontSize: 10,
-                    fontWeight: 'bold',
-                  }}
-                >
-                  {r}
-                </Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-        </View>
-
-        <View style={styles.opportunitiesStack}>
-          {localOpportunities.slice(0, 5).map(opp => (
-            <OpportunityCard
-              key={opp.id}
-              opportunity={opp}
-              onPress={() => handleOpportunityPress(opp)}
-              isDarkMode={isDarkMode}
-            />
-          ))}
-
-          {localOpportunities.length === 0 && (
-            <View style={styles.emptyStack}>
-              <Text style={[Typography.caption, { color: themeColors.neutralForeground3 }]}>
-                No local opportunities found in range. Displaying fallbacks...
+        {localOpportunities.length >= 3 && (
+          <View>
+            <View style={styles.locationHeaderRow}>
+              <Text style={[Typography.bodyStrong, { color: themeColors.neutralForeground1 }]}>
+                {localOpportunities.some(opp => !opp.isRemote && opp.distanceKm <= 5)
+                  ? "Opportunities in Gwalior"
+                  : "Opportunities Near You"}
               </Text>
             </View>
-          )}
-        </View>
+
+            <View style={styles.opportunitiesStack}>
+              {localOpportunities.slice(0, 5).map(opp => (
+                <OpportunityCard
+                  key={opp.id}
+                  opportunity={opp}
+                  onPress={() => handleOpportunityPress(opp)}
+                  isDarkMode={isDarkMode}
+                />
+              ))}
+            </View>
+          </View>
+        )}
 
         {/* Volunteer from Anywhere (Remote Section) */}
         <Text style={[styles.sectionTitle, Typography.bodyStrong, { color: themeColors.neutralForeground1 }]}>
@@ -884,15 +899,7 @@ const styles = StyleSheet.create({
     marginTop: Spacing.l,
     marginBottom: Spacing.xs,
   },
-  radiusRow: {
-    paddingLeft: Spacing.xs,
-  },
-  radiusChip: {
-    paddingHorizontal: Spacing.s,
-    paddingVertical: 4,
-    borderRadius: Shapes.circular,
-    marginRight: 4,
-  },
+
   opportunitiesStack: {
     marginVertical: Spacing.xs,
   },
