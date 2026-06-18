@@ -15,7 +15,11 @@ import {
   Easing,
   PanResponder,
   Modal,
+  Platform,
+  Keyboard,
+  Vibration,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Spacing, Typography, Shapes } from '../constants/Theme';
 import { Card } from '../components/Card';
 import { Badge } from '../components/Badge';
@@ -291,6 +295,28 @@ export const Home: React.FC<HomeProps> = ({
 }) => {
   const themeColors = isDarkMode ? Colors.dark : Colors.light;
   const isCompactScreen = screenWidth < 380;
+  const insets = useSafeAreaInsets();
+
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+      }
+    );
+    const hideSubscription = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
 
   // --- State management ---
   const [causes, setCauses] = useState<CauseType[]>([]);
@@ -710,6 +736,13 @@ export const Home: React.FC<HomeProps> = ({
   const toastTimeoutRef = useRef<any>(null);
 
   const showToast = (message: string, onUndo: () => void) => {
+    // Pair with a subtle haptic tick on action
+    try {
+      Vibration.vibrate(15);
+    } catch (err) {
+      console.warn('Vibration failed', err);
+    }
+
     setToast({ message, onUndo });
     toastAnim.setValue(0);
     Animated.timing(toastAnim, {
@@ -723,7 +756,7 @@ export const Home: React.FC<HomeProps> = ({
     }
     toastTimeoutRef.current = setTimeout(() => {
       hideToast();
-    }, 4000);
+    }, 5000);
   };
 
   const hideToast = () => {
@@ -2614,53 +2647,68 @@ export const Home: React.FC<HomeProps> = ({
 
       {/* Undo Toast Notification */}
       {toast !== null && (
-        <Animated.View
-          style={[
-            {
-              position: 'absolute',
-              bottom: 80,
-              left: Spacing.m,
-              right: Spacing.m,
-              backgroundColor: isDarkMode ? '#2d2d2d' : '#1e1e1e',
-              paddingVertical: 12,
-              paddingHorizontal: Spacing.m,
-              borderRadius: Shapes.rounded,
-              flexDirection: 'row',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.25,
-              shadowRadius: 4,
-              elevation: 5,
-              zIndex: 9999,
-              opacity: toastAnim,
-              transform: [
-                {
-                  translateY: toastAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [100, 0],
-                  }),
-                },
-              ],
-            },
-          ]}
-        >
-          <Text style={{ color: '#ffffff', fontSize: 14, fontWeight: '500' }}>
-            {toast.message}
-          </Text>
+        <>
+          {/* Transparent full-screen overlay to dismiss toast on tap outside */}
           <Pressable
-            onPress={() => {
-              toast.onUndo();
-              hideToast();
-            }}
-            style={{ padding: 4 }}
+            style={[StyleSheet.absoluteFill, { zIndex: 9998 }]}
+            onPress={hideToast}
+          />
+          <Animated.View
+            style={[
+              {
+                position: 'absolute',
+                bottom: keyboardHeight > 0 
+                  ? (Platform.OS === 'ios' ? keyboardHeight - (50 + (insets.bottom > 0 ? insets.bottom : Spacing.s)) + 16 : 16)
+                  : 16,
+                left: 16,
+                right: 16,
+                backgroundColor: isDarkMode ? '#2d2d2d' : '#1e1e1e',
+                paddingVertical: 12,
+                paddingHorizontal: Spacing.m,
+                borderRadius: Shapes.rounded,
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.25,
+                shadowRadius: 4,
+                elevation: 5,
+                zIndex: 9999,
+                opacity: toastAnim,
+                transform: [
+                  {
+                    translateY: toastAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [100, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
           >
-            <Text style={{ color: themeColors.brandForeground1, fontSize: 14, fontWeight: 'bold' }}>
-              Undo
+            <Text style={{ color: '#ffffff', fontSize: 14, fontWeight: '500' }}>
+              {toast.message}
             </Text>
-          </Pressable>
-        </Animated.View>
+            <Pressable
+              onPress={() => {
+                toast.onUndo();
+                hideToast();
+              }}
+              style={{
+                paddingVertical: 12,
+                paddingHorizontal: 20,
+                marginRight: -Spacing.m,
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Undo last action"
+            >
+              <Text style={{ color: themeColors.brandForeground1, fontSize: 14, fontWeight: 'bold' }}>
+                Undo
+              </Text>
+            </Pressable>
+          </Animated.View>
+        </>
       )}
 
     </View>
