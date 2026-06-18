@@ -355,10 +355,7 @@ export const Home: React.FC<HomeProps> = ({
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         
-        {/* ## Section 2: Learn About Causes ## */}
-        <Text style={[styles.sectionTitle, Typography.bodyStrong, { color: themeColors.neutralForeground1 }]}>
-          Learn about causes
-        </Text>
+        {/* ## Section 2: Causes Carousel ## */}
         
         <View
           onTouchStart={() => onSetPagerScrollEnabled?.(false)}
