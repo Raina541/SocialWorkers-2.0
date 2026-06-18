@@ -21,6 +21,7 @@ import { Avatar } from '../components/Avatar';
 import { HandshakeHeartIcon } from '../components/HandshakeHeartIcon';
 import { OpportunityCard } from '../components/OpportunityCard';
 import { MicroVolunteering } from './MicroVolunteering';
+import { NotificationsScreen } from './NotificationsScreen';
 import { Personalization, CauseType, Opportunity } from '../services/personalization';
 import { StoryService, Story } from '../services/storyManager';
 import { Ionicons } from '@expo/vector-icons';
@@ -77,11 +78,8 @@ export const Home: React.FC<HomeProps> = ({ isDarkMode = false }) => {
   const storyTimerRef = useRef<any>(null);
 
   // Notifications
-  const [notifications, setNotifications] = useState([
-    { id: '1', title: 'Climate Pledge Drive', body: 'Tomorrow at 10 AM (Gwalior)', unread: true },
-    { id: '2', title: 'Food Rescue Alert', body: 'Evening shifts have open slots', unread: true },
-  ]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(2);
 
   // Idea Threads state
   const [ideas, setIdeas] = useState<Idea[]>([
@@ -261,8 +259,6 @@ export const Home: React.FC<HomeProps> = ({ isDarkMode = false }) => {
 
   const handleNotificationPress = () => {
     setShowNotifications(true);
-    // Mark notifications as read
-    setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
   };
 
   const handleOpportunityPress = (opp: Opportunity) => {
@@ -285,8 +281,6 @@ export const Home: React.FC<HomeProps> = ({ isDarkMode = false }) => {
       ]
     );
   };
-
-  const unreadNotificationsCount = notifications.filter(n => n.unread).length;
 
   return (
     <View style={[styles.container, { backgroundColor: themeColors.neutralBackground2 }]}>
@@ -545,31 +539,12 @@ export const Home: React.FC<HomeProps> = ({ isDarkMode = false }) => {
       </Modal>
 
       {/* Modal 2: Notifications List */}
-      <Modal visible={showNotifications} transparent animationType="fade">
-        <View style={styles.notificationOverlay}>
-          <View style={[styles.notificationModal, { backgroundColor: themeColors.neutralBackground1, borderColor: themeColors.neutralStroke2 }]}>
-            <View style={styles.notificationHeader}>
-              <Text style={[Typography.bodyStrong, { color: themeColors.neutralForeground1 }]}>
-                Reminders & Alerts
-              </Text>
-              <Pressable onPress={() => setShowNotifications(false)}>
-                <Ionicons name="close" size={24} color={themeColors.neutralForeground1} />
-              </Pressable>
-            </View>
-            <ScrollView style={styles.notificationList}>
-              {notifications.map(n => (
-                <View key={n.id} style={[styles.notificationItem, { borderBottomColor: themeColors.neutralStroke2 }]}>
-                  <Text style={[Typography.bodyStrong, { color: themeColors.neutralForeground1 }]}>
-                    {n.title}
-                  </Text>
-                  <Text style={[Typography.caption, { color: themeColors.neutralForeground3, marginTop: 2 }]}>
-                    {n.body}
-                  </Text>
-                </View>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
+      <Modal visible={showNotifications} animationType="slide">
+        <NotificationsScreen
+          isDarkMode={isDarkMode}
+          onBack={() => setShowNotifications(false)}
+          onUnreadCountChange={(count) => setUnreadNotificationsCount(count)}
+        />
       </Modal>
 
       {/* Modal 3: Immersive Story Viewer */}
