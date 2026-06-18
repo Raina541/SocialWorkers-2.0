@@ -29,7 +29,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
-const CARD_WIDTH = (screenWidth - Spacing.m * 2 - Spacing.s * 1.3) / 2.3;
+const CARD_WIDTH = ((screenWidth - Spacing.m * 2 - Spacing.s * 1.3) / 2.3) * 0.9;
 
 // Unsplash cause icon mapping
 const CAUSE_IMAGES: Record<CauseType, string> = {
@@ -801,9 +801,9 @@ const styles = StyleSheet.create({
   },
   causeTitleText: {
     color: '#ffffff',
-    fontSize: 11,
+    fontSize: 15,
     fontWeight: '700',
-    lineHeight: 14,
+    lineHeight: 22.5,
   },
   microCard: {
     marginTop: Spacing.l,
