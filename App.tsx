@@ -181,11 +181,20 @@ function MainLayout() {
               />
 
               <View style={styles.tabContent}>
-                <Ionicons
-                  name={isSelected ? tab.activeIcon : tab.inactiveIcon}
-                  size={22}
-                  color={isSelected ? themeColors.brandForeground1 : themeColors.neutralForeground3}
-                />
+                <View
+                  style={[
+                    styles.tabIconContainer,
+                    {
+                      backgroundColor: isSelected ? themeColors.brandBackgroundSubtle : 'transparent',
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name={isSelected ? tab.activeIcon : tab.inactiveIcon}
+                    size={20}
+                    color={isSelected ? themeColors.brandForeground1 : themeColors.neutralForeground3}
+                  />
+                </View>
                 <Text
                   style={[
                     styles.tabLabel,
@@ -269,6 +278,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingTop: 4,
+  },
+  tabIconContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 2,
   },
   tabLabel: {
     fontSize: 10,

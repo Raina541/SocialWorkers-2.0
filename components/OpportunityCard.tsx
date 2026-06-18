@@ -87,45 +87,23 @@ export const OpportunityCard: React.FC<OpportunityCardProps> = ({
         {storySentence}
       </Text>
 
-      {/* 3. Meta Information Row (Clock and Location chips) */}
+      {/* 3. Combined Time & Location Row */}
       <View style={styles.metaRow}>
-        <View style={[styles.chip, { backgroundColor: isDarkMode ? '#292929' : '#f0f0f0' }]}>
-          <Ionicons name="time-outline" size={14} color={themeColors.neutralForeground3} style={styles.chipIcon} />
-          <Text style={[styles.chipText, { color: themeColors.neutralForeground2 }]}>
-            {opportunity.durationHrs < 1 ? `${opportunity.durationHrs * 60}m` : `${opportunity.durationHrs} hrs`}
-          </Text>
-        </View>
-
-        <View style={[styles.chip, { backgroundColor: isDarkMode ? '#292929' : '#f0f0f0' }]}>
-          <Ionicons name="location-outline" size={14} color={themeColors.neutralForeground3} style={styles.chipIcon} />
-          <Text style={[styles.chipText, { color: themeColors.neutralForeground2 }]} numberOfLines={1}>
-            {opportunity.isRemote
-              ? 'Remote'
-              : opportunity.distanceKm > 5
-                ? `${opportunity.locationName} (${Math.round(opportunity.distanceKm)} km away)`
-                : opportunity.locationName
-            }
-          </Text>
-        </View>
+        <Text style={[styles.metaText, { color: themeColors.neutralForeground3 }]}>
+          ⏱ {opportunity.durationHrs < 1 ? `${opportunity.durationHrs * 60}m` : `${opportunity.durationHrs} hrs`}  ·  {opportunity.isRemote ? '💻 Remote' : `📍 ${opportunity.distanceKm < 1 ? 'Under 1 km' : `${opportunity.distanceKm.toFixed(1)} km`}`}
+        </Text>
       </View>
 
-      {/* 4. Category Tag with Slight Gradient */}
+      {/* 4. Category Tag with Subtle Border */}
       <View style={styles.tagWrapper}>
-        <LinearGradient
-          colors={isDarkMode ? ['#1b3f6c', '#10253f'] : ['#ebf3fc', '#cfe0f7']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={styles.gradientTag}
-        >
-          <Text style={[styles.tagText, { color: isDarkMode ? '#479ef5' : '#0f6cbd' }]}>
+        <View style={[styles.subtleTag, { borderColor: themeColors.neutralStroke2 }]}>
+          <Text style={[styles.tagText, { color: themeColors.neutralForeground2 }]}>
             {opportunity.categoryTag}
           </Text>
-        </LinearGradient>
+        </View>
       </View>
 
-      <View style={[styles.divider, { backgroundColor: themeColors.neutralStroke2 }]} />
-
-      {/* 5. Organization Row + Social/Mutual Signups */}
+      {/* 5. Compact Footer Row (Organization + Participants side-by-side) */}
       <View style={styles.footerRow}>
         {/* Left: Organization Logo + Name */}
         <View style={styles.orgInfo}>
@@ -149,7 +127,7 @@ export const OpportunityCard: React.FC<OpportunityCardProps> = ({
                     styles.avatarBorder,
                     {
                       borderColor: themeColors.neutralBackground1,
-                      marginLeft: idx === 0 ? 0 : -10,
+                      marginLeft: idx === 0 ? 0 : -8,
                       zIndex: 10 - idx,
                     },
                   ]}
@@ -163,10 +141,7 @@ export const OpportunityCard: React.FC<OpportunityCardProps> = ({
               ))}
             </View>
             <Text style={[styles.signupText, { color: themeColors.neutralForeground3 }]}>
-              {opportunity.friendsSignedUpNames.slice(0, 2).join(', ')}
-              {opportunity.friendsSignedUpCount > 2
-                ? ` +${opportunity.friendsSignedUpCount - 2} others`
-                : ' signed up'}
+              {opportunity.friendsSignedUpCount} {opportunity.friendsSignedUpCount === 1 ? 'person' : 'people'} signed up
             </Text>
           </View>
         )}
@@ -187,42 +162,25 @@ const styles = StyleSheet.create({
   },
   metaRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: Spacing.s,
+    marginBottom: Spacing.xs,
   },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.s,
-    paddingVertical: Spacing.xxs,
-    borderRadius: Shapes.circular,
-    marginRight: Spacing.xs,
-    marginBottom: Spacing.xxs,
-  },
-  chipIcon: {
-    marginRight: 4,
-  },
-  chipText: {
-    fontSize: 12,
-    fontWeight: '500',
+  metaText: {
+    ...Typography.caption,
+    color: '#616161',
   },
   tagWrapper: {
     flexDirection: 'row',
-    marginBottom: Spacing.s,
+    marginBottom: Spacing.m,
   },
-  gradientTag: {
+  subtleTag: {
+    borderWidth: 1,
     paddingHorizontal: Spacing.s,
-    paddingVertical: Spacing.xxs,
+    paddingVertical: 2,
     borderRadius: Shapes.rounded,
   },
   tagText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
-  },
-  divider: {
-    height: 1,
-    width: '100%',
-    marginBottom: Spacing.s,
   },
   footerRow: {
     flexDirection: 'row',
