@@ -80,7 +80,7 @@ export const MicroVolunteering: React.FC<MicroVolunteeringProps> = ({
         </View>
 
         {/* Opportunity Lists */}
-        <Text style={[styles.sectionTitle, Typography.bodyStrong, { color: themeColors.neutralForeground1 }]}>
+        <Text style={[styles.sectionTitle, Typography.sectionHeading, { color: themeColors.neutralForeground1 }]}>
           Available Listings ({opportunities.length})
         </Text>
 

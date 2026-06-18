@@ -648,7 +648,7 @@ export const Home: React.FC<HomeProps> = ({
         {localOpportunities.length >= 3 && (
           <View>
             <View style={styles.locationHeaderRow}>
-              <Text style={[Typography.bodyStrong, { color: themeColors.neutralForeground1 }]}>
+              <Text style={[Typography.sectionHeading, { color: themeColors.neutralForeground1 }]}>
                 {localOpportunities.some(opp => !opp.isRemote && opp.distanceKm <= 5)
                   ? "Opportunities in Gwalior"
                   : "Opportunities Near You"}
@@ -669,7 +669,7 @@ export const Home: React.FC<HomeProps> = ({
         )}
 
         {/* Volunteer from Anywhere (Remote Section) */}
-        <Text style={[styles.sectionTitle, Typography.bodyStrong, { color: themeColors.neutralForeground1 }]}>
+        <Text style={[styles.sectionTitle, Typography.sectionHeading, { color: themeColors.neutralForeground1 }]}>
           Volunteer from anywhere
         </Text>
         <Text style={[Typography.caption, { color: themeColors.neutralForeground3, marginBottom: Spacing.xs, marginTop: -Spacing.xs }]}>
@@ -688,7 +688,7 @@ export const Home: React.FC<HomeProps> = ({
         </View>
 
         {/* ## Section 5: Idea Threads ## */}
-        <Text style={[styles.sectionTitle, Typography.bodyStrong, { color: themeColors.neutralForeground1 }]}>
+        <Text style={[styles.sectionTitle, Typography.sectionHeading, { color: themeColors.neutralForeground1 }]}>
           Idea threads
         </Text>
         <Text style={[Typography.caption, { color: themeColors.neutralForeground3, marginBottom: Spacing.s, marginTop: -Spacing.xs }]}>

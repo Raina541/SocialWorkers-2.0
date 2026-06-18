@@ -56,7 +56,7 @@ export const Profile: React.FC<ProfileProps> = ({
       </View>
 
       {/* Interactive Presence Selector */}
-      <Text style={[styles.sectionTitle, Typography.bodyStrong, { color: themeColors.neutralForeground1 }]}>
+      <Text style={[styles.sectionTitle, Typography.sectionHeading, { color: themeColors.neutralForeground1 }]}>
         Set Your Availability
       </Text>
       <Card variant="Filled" isDarkMode={isDarkMode}>
@@ -133,7 +133,7 @@ export const Profile: React.FC<ProfileProps> = ({
       </View>
 
       {/* Settings Options */}
-      <Text style={[styles.sectionTitle, Typography.bodyStrong, { color: themeColors.neutralForeground1 }]}>
+      <Text style={[styles.sectionTitle, Typography.sectionHeading, { color: themeColors.neutralForeground1 }]}>
         Preferences & Settings
       </Text>
 

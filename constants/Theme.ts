@@ -135,6 +135,11 @@ export const Typography = {
     fontWeight: '600' as const,
     lineHeight: 28,
   },
+  sectionHeading: {
+    fontSize: 20,
+    fontWeight: '600' as const,
+    lineHeight: 30,
+  },
   title: {
     fontSize: 24,
     fontWeight: '700' as const,

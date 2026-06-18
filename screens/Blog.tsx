@@ -94,7 +94,7 @@ export const Blog: React.FC<BlogProps> = ({ isDarkMode = false }) => {
       </Text>
 
       {/* Featured Header */}
-      <Text style={[styles.sectionTitle, Typography.bodyStrong, { color: themeColors.neutralForeground1 }]}>
+      <Text style={[styles.sectionTitle, Typography.sectionHeading, { color: themeColors.neutralForeground1 }]}>
         Featured Articles
       </Text>
 
@@ -142,7 +142,7 @@ export const Blog: React.FC<BlogProps> = ({ isDarkMode = false }) => {
       </ScrollView>
 
       {/* Recent Feed */}
-      <Text style={[styles.sectionTitle, Typography.bodyStrong, { color: themeColors.neutralForeground1, marginTop: Spacing.m }]}>
+      <Text style={[styles.sectionTitle, Typography.sectionHeading, { color: themeColors.neutralForeground1, marginTop: Spacing.m }]}>
         Recent Publications
       </Text>
 
