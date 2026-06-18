@@ -106,7 +106,7 @@ export const OpportunityCard: React.FC<OpportunityCardProps> = ({
             style={styles.metaIcon}
           />
           <Text style={[styles.metaText, { color: themeColors.neutralForeground3 }]}>
-            {opportunity.isRemote ? 'Remote' : `${opportunity.distanceKm < 1 ? 'Under 1 km' : `${opportunity.distanceKm.toFixed(1)} km`}`}
+            {opportunity.isRemote ? 'Remote' : opportunity.locationName}
           </Text>
         </View>
       </View>
