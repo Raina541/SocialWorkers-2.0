@@ -306,6 +306,200 @@ class PersonalizationManager {
     // Step 6: Fallback to micro-volunteering listings
     return opportunities.filter(o => o.durationHrs <= 2);
   }
+
+  // --- Ideas and Social State Centralization ---
+  private allowMentions = true;
+  private supportTapsCount = 0;
+  private ideas: Idea[] = [
+    {
+      id: 'idea_1',
+      description: 'Developing community kitchen gardens in abandoned plots to provide organic vegetables to low-income senior citizens.',
+      creatorName: 'Morar Neighborhood Council',
+      creatorLogo: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=80',
+      initialSupports: 48,
+      taggedFriends: ['anita', 'sunita'],
+      mentionsCount: 25,
+      isMentionedBadge: false,
+    },
+    {
+      id: 'idea_2',
+      description: 'Setting up roadside water dispensers (Pyaus) with bio-sand filtration systems for hot summer months.',
+      creatorName: 'WASH Coalition Gwalior',
+      creatorLogo: 'https://images.unsplash.com/photo-1541963463532-d68292c34b19?w=80',
+      initialSupports: 92,
+      taggedFriends: ['rahul'],
+      mentionsCount: 14,
+      isMentionedBadge: true, // Show "Rahul mentioned you" on this one to display badge feature
+    },
+  ];
+
+  private notifications: NotificationItem[] = [
+    {
+      id: 'n_1',
+      title: 'New Opportunity',
+      body: 'Spend a few hours mentoring students and helping them build confidence through reading at Gudi guda ka naka.',
+      category: 'Opportunity Update',
+      timestamp: new Date(),
+      timeLabel: '5m ago',
+      unread: true,
+      senderName: 'Pratham MP Education',
+      senderLogo: 'https://images.unsplash.com/photo-1577896851231-70ef18881754?w=80',
+    },
+    {
+      id: 'n_2',
+      title: 'Account Alert',
+      body: 'Your account was accessed from a new device in Lashkar, Gwalior.',
+      category: 'System Alert',
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
+      timeLabel: '2h ago',
+      unread: false,
+      senderName: 'System Security',
+      senderLogo: '',
+    },
+    {
+      id: 'n_3',
+      title: "Anita thinks you'd care about this idea",
+      body: 'Anita tagged you in the Developing community kitchen gardens Idea Thread. Check it out!',
+      category: 'New Message',
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 18), // 18 hours ago
+      timeLabel: 'Yesterday, 4:30 PM',
+      unread: true,
+      senderName: 'anita (Friend)',
+      senderLogo: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=80',
+      ideaId: 'idea_1',
+    },
+    {
+      id: 'n_4',
+      title: 'Weekly Assembly Meeting',
+      body: 'Weekly Gwalior environmental coalition meeting starts Sunday 10 AM at City Centre municipal hall.',
+      category: 'Event Reminder',
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 28), // 28 hours ago
+      timeLabel: 'Yesterday, 10:15 AM',
+      unread: false,
+      senderName: 'Green Gwalior Group',
+      senderLogo: 'https://images.unsplash.com/photo-1530595467537-0b5996c41f2d?w=80',
+    },
+    {
+      id: 'n_5',
+      title: 'Community Announcements',
+      body: 'CWS Taskforce has approved 4 new rural caseworkers. Welcome them in the community forum.',
+      category: 'Community Announcement',
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 6), // 6 days ago
+      timeLabel: '12 Sept, 2:10 PM',
+      unread: false,
+      senderName: 'Child Welfare Service',
+      senderLogo: 'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=80',
+    },
+    {
+      id: 'n_6',
+      title: 'New Achievement Earned',
+      body: 'Congratulations! You unlocked the "Active Responder" badge for completing 3 micro-volunteering opportunities.',
+      category: 'Achievement Badge',
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 8), // 8 days ago
+      timeLabel: '10 Sept, 9:00 AM',
+      unread: false,
+      senderName: 'Achievement Portal',
+      senderLogo: '',
+    },
+  ];
+
+  public getAllowMentions(): boolean {
+    return this.allowMentions;
+  }
+
+  public setAllowMentions(val: boolean) {
+    this.allowMentions = val;
+  }
+
+  public getSupportTapsCount(): number {
+    return this.supportTapsCount;
+  }
+
+  public incrementSupportTapsCount() {
+    this.supportTapsCount += 1;
+  }
+
+  public getIdeas(): Idea[] {
+    return this.ideas;
+  }
+
+  public updateIdea(ideaId: string, updated: Partial<Idea>) {
+    this.ideas = this.ideas.map(idea => {
+      if (idea.id === ideaId) {
+        return { ...idea, ...updated };
+      }
+      return idea;
+    });
+  }
+
+  public getNotifications(): NotificationItem[] {
+    return this.notifications;
+  }
+
+  public setNotifications(notifs: NotificationItem[]) {
+    this.notifications = notifs;
+  }
+
+  public addNotification(notif: Omit<NotificationItem, 'id' | 'timestamp' | 'timeLabel'>) {
+    const newNotif: NotificationItem = {
+      ...notif,
+      id: `n_${Date.now()}`,
+      timestamp: new Date(),
+      timeLabel: 'Just now',
+    };
+    this.notifications = [newNotif, ...this.notifications];
+  }
+}
+
+export interface Friend {
+  username: string;
+  displayName: string;
+  avatar: string;
+  recentInteraction?: boolean;
+}
+
+export const MOCK_FRIENDS: Friend[] = [
+  { username: 'anita', displayName: 'Anita', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=80', recentInteraction: true },
+  { username: 'sunita', displayName: 'Sunita', avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=80', recentInteraction: true },
+  { username: 'rahul', displayName: 'Rahul', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80', recentInteraction: true },
+  { username: 'priya', displayName: 'Priya', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80', recentInteraction: false },
+  { username: 'rohan', displayName: 'Rohan', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=80', recentInteraction: false },
+  { username: 'sneha', displayName: 'Sneha', avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=80', recentInteraction: false },
+  { username: 'sanjay', displayName: 'Sanjay', avatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=80', recentInteraction: false },
+  { username: 'vivek', displayName: 'Vivek', avatar: 'https://images.unsplash.com/photo-1500048993953-d23a436266cf?w=80', recentInteraction: false },
+  { username: 'neha', displayName: 'Neha', avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=80', recentInteraction: false },
+];
+
+export interface Idea {
+  id: string;
+  description: string;
+  creatorName: string;
+  creatorLogo: string;
+  initialSupports: number;
+  taggedFriends: string[];
+  mentionsCount: number;
+  isMentionedBadge?: boolean;
+}
+
+export interface NotificationItem {
+  id: string;
+  title: string;
+  body: string;
+  category:
+    | 'Opportunity Update'
+    | 'Community Announcement'
+    | 'Event Reminder'
+    | 'New Message'
+    | 'Connection Request'
+    | 'Achievement Badge'
+    | 'Application Status'
+    | 'System Alert';
+  timestamp: Date;
+  timeLabel: string;
+  unread: boolean;
+  senderName: string;
+  senderLogo: string;
+  ideaId?: string;
 }
 
 export const Personalization = new PersonalizationManager();

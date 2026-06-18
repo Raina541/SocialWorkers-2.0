@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Switch, Pressable } from 'react-native';
 import { Colors, Spacing, Typography, Shapes } from '../constants/Theme';
 import { Avatar, PresenceState } from '../components/Avatar';
@@ -6,6 +6,7 @@ import { Card } from '../components/Card';
 import { Badge } from '../components/Badge';
 import { Button } from '../components/Button';
 import { Ionicons } from '@expo/vector-icons';
+import { Personalization } from '../services/personalization';
 
 interface ProfileProps {
   isDarkMode: boolean;
@@ -21,6 +22,12 @@ export const Profile: React.FC<ProfileProps> = ({
   onChangePresence,
 }) => {
   const themeColors = isDarkMode ? Colors.dark : Colors.light;
+  const [allowMentions, setAllowMentions] = useState(Personalization.getAllowMentions());
+
+  const handleToggleAllowMentions = (val: boolean) => {
+    setAllowMentions(val);
+    Personalization.setAllowMentions(val);
+  };
 
   const presenceStates: PresenceState[] = ['Available', 'Busy', 'DND', 'Away', 'Offline'];
 
@@ -151,6 +158,29 @@ export const Profile: React.FC<ProfileProps> = ({
             onValueChange={onToggleDarkMode}
             trackColor={{ false: themeColors.neutralStroke1, true: themeColors.brandBackground }}
             thumbColor={isDarkMode ? '#ffffff' : '#f5f5f5'}
+          />
+        </View>
+      </Card>
+
+      {/* Privacy: Allow Mentions Switch */}
+      <Card variant="Filled" isDarkMode={isDarkMode} style={styles.settingItemCard}>
+        <View style={styles.settingRow}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: Spacing.s }}>
+            <Ionicons name="shield-checkmark" size={20} color={themeColors.neutralForeground2} />
+            <View style={{ marginLeft: Spacing.s, flex: 1 }}>
+              <Text style={[Typography.body, { color: themeColors.neutralForeground1, fontWeight: '500' }]}>
+                Allow mentions in ideas
+              </Text>
+              <Text style={[Typography.caption, { color: themeColors.neutralForeground3, marginTop: 2 }]}>
+                Let friends tag you in early-stage initiatives
+              </Text>
+            </View>
+          </View>
+          <Switch
+            value={allowMentions}
+            onValueChange={handleToggleAllowMentions}
+            trackColor={{ false: themeColors.neutralStroke1, true: themeColors.brandBackground }}
+            thumbColor={allowMentions ? '#ffffff' : '#f5f5f5'}
           />
         </View>
       </Card>

@@ -26,12 +26,147 @@ import { OpportunityCard } from '../components/OpportunityCard';
 import { MicroVolunteering } from './MicroVolunteering';
 import { NotificationsScreen } from './NotificationsScreen';
 import { RelaxedVolunteerIllustration } from '../components/RelaxedVolunteerIllustration';
-import { Personalization, CauseType, Opportunity } from '../services/personalization';
+import { Personalization, CauseType, Opportunity, Idea, NotificationItem, MOCK_FRIENDS, Friend } from '../services/personalization';
 import { StoryService, Story } from '../services/storyManager';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+
+// Odometer Rolling Number Component
+interface OdometerTextProps {
+  value: number;
+  style?: any;
+}
+
+const OdometerText: React.FC<OdometerTextProps> = ({ value, style }) => {
+  const [prevVal, setPrevVal] = useState(value);
+  const [currVal, setCurrVal] = useState(value);
+  const anim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (value !== currVal) {
+      setPrevVal(currVal);
+      setCurrVal(value);
+      anim.setValue(0);
+      Animated.timing(anim, {
+        toValue: 1,
+        duration: 350,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [value]);
+
+  if (prevVal === currVal) {
+    return <Text style={style}>{currVal}</Text>;
+  }
+
+  const translateY = anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -22],
+  });
+
+  return (
+    <View style={{ height: 22, overflow: 'hidden' }}>
+      <Animated.View style={{ transform: [{ translateY }] }}>
+        <Text style={[style, { height: 22, lineHeight: 22 }]}>{prevVal}</Text>
+        <Text style={[style, { height: 22, lineHeight: 22 }]}>{currVal}</Text>
+      </Animated.View>
+    </View>
+  );
+};
+
+// Interactive Support Button Component with scale spring pop animation
+interface SupportButtonProps {
+  ideaId: string;
+  initialCount: number;
+  hasSupported: boolean;
+  onPress: () => void;
+  isDarkMode: boolean;
+  themeColors: any;
+}
+
+const SupportButton: React.FC<SupportButtonProps> = ({
+  ideaId,
+  initialCount,
+  hasSupported,
+  onPress,
+  isDarkMode,
+  themeColors,
+}) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const currentCount = initialCount + (hasSupported ? 1 : 0);
+  const supportTaps = Personalization.getSupportTapsCount();
+  const showLabel = supportTaps < 3;
+
+  const handlePress = () => {
+    // Heart scale animation: 1 -> 1.3 -> 1
+    scaleAnim.setValue(1);
+    Animated.sequence([
+      Animated.spring(scaleAnim, {
+        toValue: 1.3,
+        useNativeDriver: true,
+        friction: 4,
+        tension: 40,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1.0,
+        useNativeDriver: true,
+        friction: 4,
+        tension: 40,
+      }),
+    ]).start();
+
+    onPress();
+  };
+
+  return (
+    <Pressable
+      onPress={handlePress}
+      style={{
+        borderColor: themeColors.brandForeground1,
+        borderWidth: 1.5,
+        backgroundColor: hasSupported ? themeColors.brandBackgroundSubtle : 'transparent',
+        paddingHorizontal: Spacing.s + 4,
+        height: 44, // Tap target >= 44px
+        borderRadius: 22,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minWidth: 90,
+      }}
+    >
+      <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+        <Ionicons
+          name={hasSupported ? "heart" : "heart-outline"}
+          size={20}
+          color={themeColors.brandForeground1}
+        />
+      </Animated.View>
+      
+      {showLabel && (
+        <Text style={{ color: themeColors.brandForeground1, marginLeft: 6, fontSize: 13, fontWeight: '600' }}>
+          Support
+        </Text>
+      )}
+
+      {showLabel && (
+        <Text style={{ color: themeColors.brandForeground1, marginHorizontal: 4 }}>·</Text>
+      )}
+
+      <OdometerText
+        value={currentCount}
+        style={{
+          color: themeColors.brandForeground1,
+          fontWeight: '600',
+          fontSize: 17, // ~16-18px semibold
+          marginLeft: showLabel ? 0 : 6,
+        }}
+      />
+    </Pressable>
+  );
+};
+
 const CARD_WIDTH = ((screenWidth - Spacing.m * 2 - Spacing.s * 1.3) / 2.3) * 0.9;
 
 // Unsplash cause icon mapping
@@ -50,15 +185,7 @@ const CAUSE_IMAGES: Record<CauseType, string> = {
   'Rural Development': 'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=200',
 };
 
-interface Idea {
-  id: string;
-  description: string;
-  creatorName: string;
-  creatorLogo: string;
-  initialSupports: number;
-  taggedFriends: string[];
-  mentionsCount: number;
-}
+
 
 interface HomeProps {
   isDarkMode?: boolean;
@@ -86,7 +213,9 @@ export const Home: React.FC<HomeProps> = ({
   const storyTimerRef = useRef<any>(null);
 
   // Notifications
-  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(2);
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(
+    Personalization.getNotifications().filter(n => n.unread).length
+  );
 
   // --- Custom Transition & Gesture Implementation ---
   const isTransitioning = useRef(false);
@@ -279,30 +408,85 @@ export const Home: React.FC<HomeProps> = ({
     };
   }, [isMicroVolunteeringMounted, isNotificationsMounted]);
 
-  // Idea Threads state
-  const [ideas, setIdeas] = useState<Idea[]>([
-    {
-      id: 'idea_1',
-      description: 'Developing community kitchen gardens in abandoned plots to provide organic vegetables to low-income senior citizens.',
-      creatorName: 'Morar Neighborhood Council',
-      creatorLogo: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=80',
-      initialSupports: 48,
-      taggedFriends: ['anita', 'sunita'],
-      mentionsCount: 25,
-    },
-    {
-      id: 'idea_2',
-      description: 'Setting up roadside water dispensers (Pyaus) with bio-sand filtration systems for hot summer months.',
-      creatorName: 'WASH Coalition Gwalior',
-      creatorLogo: 'https://images.unsplash.com/photo-1541963463532-d68292c34b19?w=80',
-      initialSupports: 92,
-      taggedFriends: ['rahul'],
-      mentionsCount: 14,
-    },
-  ]);
+  // Idea Threads state synced with Personalization store
+  const [ideas, setIdeas] = useState<Idea[]>(Personalization.getIdeas());
   const [supportState, setSupportState] = useState<Record<string, boolean>>({});
-  const [showMentionBoxForIdea, setShowMentionBoxForIdea] = useState<string | null>(null);
-  const [newMentionText, setNewMentionText] = useState('');
+  const [highlightedIdeaId, setHighlightedIdeaId] = useState<string | null>(null);
+
+  // Toast state
+  const toastAnim = useRef(new Animated.Value(0)).current;
+  const [toast, setToast] = useState<{ message: string; onUndo: () => void } | null>(null);
+  const toastTimeoutRef = useRef<any>(null);
+
+  const showToast = (message: string, onUndo: () => void) => {
+    setToast({ message, onUndo });
+    toastAnim.setValue(0);
+    Animated.timing(toastAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
+    toastTimeoutRef.current = setTimeout(() => {
+      hideToast();
+    }, 4000);
+  };
+
+  const hideToast = () => {
+    Animated.timing(toastAnim, {
+      toValue: 0,
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => {
+      setToast(null);
+    });
+  };
+
+  // Friend Picker state
+  const [pickerIdeaId, setPickerIdeaId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
+  const pickerAnim = useRef(new Animated.Value(0)).current;
+
+  const openPicker = (ideaId: string) => {
+    const idea = ideas.find(i => i.id === ideaId);
+    if (!idea) return;
+    setPickerIdeaId(ideaId);
+    setSearchQuery('');
+    setSelectedFriends([...idea.taggedFriends]);
+    pickerAnim.setValue(0);
+    Animated.timing(pickerAnim, {
+      toValue: 1,
+      duration: 350,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const closePicker = () => {
+    Animated.timing(pickerAnim, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start(() => {
+      setPickerIdeaId(null);
+    });
+  };
+
+  const mainScrollViewRef = useRef<ScrollView>(null);
+
+  const handleScrollToIdea = (ideaId: string) => {
+    // Wait slightly for screen transition to complete, then scroll
+    setTimeout(() => {
+      mainScrollViewRef.current?.scrollToEnd({ animated: true });
+      setHighlightedIdeaId(ideaId);
+      setTimeout(() => {
+        setHighlightedIdeaId(null);
+      }, 2200);
+    }, 400);
+  };
 
   // Load and Rank Data
   const loadPersonalizedData = () => {
@@ -471,32 +655,100 @@ export const Home: React.FC<HomeProps> = ({
     // Record positive signal on support
     if (!isSupported) {
       Personalization.recordSignal(cause, 'Support');
+      Personalization.incrementSupportTapsCount();
     }
     
-    setSupportState(prev => ({ ...prev, [ideaId]: !isSupported }));
+    const newSupported = !isSupported;
+    setSupportState(prev => ({ ...prev, [ideaId]: newSupported }));
+
+    // Update the ideas list
+    const updatedIdeas = ideas.map(i => {
+      if (i.id === ideaId) {
+        return {
+          ...i,
+          initialSupports: i.initialSupports, // SupportButton calculates dynamic count
+        };
+      }
+      return i;
+    });
+    setIdeas(updatedIdeas);
+    Personalization.updateIdea(ideaId, { initialSupports: updatedIdeas.find(i => i.id === ideaId)!.initialSupports });
   };
 
-  const handleAddMention = (ideaId: string, cause: CauseType) => {
-    if (!newMentionText.trim()) return;
+  const handleDonePicker = () => {
+    if (!pickerIdeaId) return;
+    const idea = ideas.find(i => i.id === pickerIdeaId);
+    if (!idea) return;
 
-    Personalization.recordSignal(cause, 'TagFriends'); // Record tag signal
+    const oldFriends = idea.taggedFriends;
+    const newFriends = selectedFriends;
 
-    setIdeas(prev =>
-      prev.map(i => {
-        if (i.id === ideaId) {
-          return {
-            ...i,
-            taggedFriends: [...i.taggedFriends, newMentionText.trim()],
-            mentionsCount: i.mentionsCount + 1,
-          };
-        }
-        return i;
-      })
-    );
+    if (newFriends.length > 10) {
+      Alert.alert("Limit Reached", "You can mention up to 10 friends per idea thread.");
+      return;
+    }
 
-    setNewMentionText('');
-    setShowMentionBoxForIdea(null);
-    Alert.alert("Tagged!", "Your friend has been tagged on this idea thread.");
+    const added = newFriends.filter(f => !oldFriends.includes(f));
+    const removed = oldFriends.filter(f => !newFriends.includes(f));
+
+    // Update local state and personalization store
+    const updatedIdeas = ideas.map(i => {
+      if (i.id === pickerIdeaId) {
+        return {
+          ...i,
+          taggedFriends: newFriends,
+          mentionsCount: i.mentionsCount + added.length - removed.length,
+        };
+      }
+      return i;
+    });
+
+    setIdeas(updatedIdeas);
+    const updatedIdea = updatedIdeas.find(i => i.id === pickerIdeaId)!;
+    Personalization.updateIdea(pickerIdeaId, {
+      taggedFriends: updatedIdea.taggedFriends,
+      mentionsCount: updatedIdea.mentionsCount,
+    });
+
+    closePicker();
+
+    // Show Confirmation Toast with Undo
+    if (added.length > 0) {
+      showToast(`Mentioned ${added.length} friend${added.length === 1 ? '' : 's'}`, () => {
+        // Undo Action: Revert back to oldFriends
+        const revertedIdeas = ideas.map(i => {
+          if (i.id === pickerIdeaId) {
+            return {
+              ...i,
+              taggedFriends: oldFriends,
+              mentionsCount: idea.mentionsCount, // original mentionsCount
+            };
+          }
+          return i;
+        });
+        setIdeas(revertedIdeas);
+        Personalization.updateIdea(pickerIdeaId, {
+          taggedFriends: oldFriends,
+          mentionsCount: idea.mentionsCount,
+        });
+      });
+
+      // Simulated mention notification for the mentioned friends:
+      // A second later they get a notification in the feed
+      setTimeout(() => {
+        Personalization.addNotification({
+          title: "Anita thinks you'd care about this idea",
+          body: `Anita tagged you in the "${idea.description.substring(0, 30)}..." Idea Thread.`,
+          category: "New Message",
+          unread: true,
+          senderName: "anita (Friend)",
+          senderLogo: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=80",
+          ideaId: idea.id,
+        });
+        // Sync unread notifications count badge on Home
+        setUnreadNotificationsCount(Personalization.getNotifications().filter(n => n.unread).length);
+      }, 1500);
+    }
   };
 
   const handleNotificationPress = () => {
@@ -535,6 +787,20 @@ export const Home: React.FC<HomeProps> = ({
     })
   );
 
+  const getFriendsLists = () => {
+    const query = searchQuery.toLowerCase().trim();
+    const filtered = MOCK_FRIENDS.filter(f =>
+      f.displayName.toLowerCase().includes(query) || f.username.toLowerCase().includes(query)
+    );
+
+    const recent = filtered.filter(f => f.recentInteraction);
+    const others = filtered.filter(f => !f.recentInteraction).sort((a, b) => a.displayName.localeCompare(b.displayName));
+    
+    return { recent, others };
+  };
+
+  const { recent: recentFriends, others: allFriendsFiltered } = getFriendsLists();
+
   return (
     <View style={[styles.container, { backgroundColor: themeColors.neutralBackground2 }]}>
       <Animated.View style={{ flex: 1, transform: [{ translateX: mainTranslateX }] }}>
@@ -556,7 +822,7 @@ export const Home: React.FC<HomeProps> = ({
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView ref={mainScrollViewRef} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         
         {/* ## Section 2: Causes Carousel ## */}
         
@@ -699,8 +965,44 @@ export const Home: React.FC<HomeProps> = ({
           {ideas.map(idea => {
             const hasSupported = !!supportState[idea.id];
             return (
-              <Card key={idea.id} variant="Filled" isDarkMode={isDarkMode} style={styles.ideaCard}>
-                
+              <Card
+                key={idea.id}
+                variant="Filled"
+                isDarkMode={isDarkMode}
+                style={[
+                  styles.ideaCard,
+                  highlightedIdeaId === idea.id && {
+                    borderColor: themeColors.brandForeground1,
+                    borderWidth: 2,
+                    shadowColor: themeColors.brandForeground1,
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.3,
+                    shadowRadius: 6,
+                    elevation: 6,
+                  }
+                ]}
+              >
+                {/* 1. Mention badge if a friend mentioned the user */}
+                {idea.isMentionedBadge && (
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      backgroundColor: themeColors.brandBackgroundSubtle,
+                      paddingVertical: 4,
+                      paddingHorizontal: 8,
+                      borderRadius: Shapes.rounded,
+                      alignSelf: 'flex-start',
+                      marginBottom: Spacing.s,
+                    }}
+                  >
+                    <Ionicons name="chatbubble-ellipses-outline" size={14} color={themeColors.brandForeground1} />
+                    <Text style={[Typography.captionStrong, { color: themeColors.brandForeground1, marginLeft: 6 }]}>
+                      Rahul mentioned you
+                    </Text>
+                  </View>
+                )}
+
                 {/* Description */}
                 <Text style={[styles.ideaDesc, { color: themeColors.neutralForeground1 }]}>
                   {idea.description}
@@ -716,63 +1018,101 @@ export const Home: React.FC<HomeProps> = ({
 
                 <View style={[styles.divider, { backgroundColor: themeColors.neutralStroke2 }]} />
 
-                {/* Support and Tag bar */}
-                <View style={styles.ideaActionBar}>
+                {/* 2. Interactive Footer Row (Mentions on Left, Support Pill Button on Right) */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                   
-                  {/* Left: Support button */}
+                  {/* Left: Mentions Stack */}
                   <Pressable
-                    onPress={() => handleSupportIdea(idea.id, 'Child Welfare')}
-                    style={styles.ideaActionItem}
+                    onPress={() => openPicker(idea.id)}
+                    style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: Spacing.s }}
                   >
-                    <HandshakeHeartIcon
-                      size={20}
-                      color={hasSupported ? themeColors.brandForeground1 : themeColors.neutralForeground3}
-                    />
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 8 }}>
+                      {idea.taggedFriends.slice(0, 3).map((username, idx) => {
+                        const info = MOCK_FRIENDS.find(f => f.username.toLowerCase() === username.toLowerCase()) || {
+                          displayName: username,
+                          avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=80',
+                        };
+                        return (
+                          <Image
+                            key={username}
+                            source={{ uri: info.avatar }}
+                            style={{
+                              width: 24,
+                              height: 24,
+                              borderRadius: 12,
+                              borderWidth: 1.5,
+                              borderColor: themeColors.neutralBackground1,
+                              marginLeft: idx === 0 ? 0 : -8,
+                              zIndex: 10 - idx,
+                            }}
+                          />
+                        );
+                      })}
+                      
+                      {idea.mentionsCount > 3 && (
+                        <View
+                          style={{
+                            width: 24,
+                            height: 24,
+                            borderRadius: 12,
+                            backgroundColor: themeColors.neutralBackground3,
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            borderWidth: 1.5,
+                            borderColor: themeColors.neutralBackground1,
+                            marginLeft: -8,
+                            zIndex: 0,
+                          }}
+                        >
+                          <Text style={{ fontSize: 9, fontWeight: 'bold', color: themeColors.neutralForeground1 }}>
+                            +{idea.mentionsCount - 3}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+
                     <Text
                       style={[
-                        styles.actionCount,
+                        Typography.caption,
                         {
-                          color: hasSupported ? themeColors.brandForeground1 : themeColors.neutralForeground2,
-                          fontWeight: hasSupported ? 'bold' : '500',
+                          color: themeColors.neutralForeground2,
+                          flex: 1,
+                          fontSize: 12,
                         }
                       ]}
+                      numberOfLines={2}
                     >
-                      {idea.initialSupports + (hasSupported ? 1 : 0)}
+                      {(() => {
+                        const prioritized = [...idea.taggedFriends].sort((a, b) => {
+                          if (a === 'priya' || a === 'rahul') return -1;
+                          if (b === 'priya' || b === 'rahul') return 1;
+                          return 0;
+                        });
+
+                        if (prioritized.length === 0) {
+                          return 'No mentions yet';
+                        }
+                        
+                        const firstFriend = MOCK_FRIENDS.find(f => f.username.toLowerCase() === prioritized[0].toLowerCase())?.displayName || prioritized[0];
+                        if (idea.mentionsCount <= 1) {
+                          return `${firstFriend} tagged`;
+                        }
+                        return `${firstFriend} and ${idea.mentionsCount - 1} others tagged`;
+                      })()}
                     </Text>
                   </Pressable>
 
-                  {/* Right: Mention/Tag button */}
-                  <Pressable
-                    onPress={() => setShowMentionBoxForIdea(showMentionBoxForIdea === idea.id ? null : idea.id)}
-                    style={styles.ideaActionItem}
-                  >
-                    <Ionicons name="people-outline" size={20} color={themeColors.neutralForeground3} />
-                    <Text style={[styles.actionCount, { color: themeColors.neutralForeground2 }]}>
-                      {idea.taggedFriends.slice(0, 2).join(', ')}
-                      {idea.mentionsCount > 2 ? ` +${idea.mentionsCount - 2} mentions` : ' mentions'}
-                    </Text>
-                  </Pressable>
+                  {/* Right: Support Button */}
+                  <SupportButton
+                    ideaId={idea.id}
+                    initialCount={idea.initialSupports}
+                    hasSupported={hasSupported}
+                    onPress={() => handleSupportIdea(idea.id, 'Child Welfare')}
+                    isDarkMode={isDarkMode}
+                    themeColors={themeColors}
+                  />
+
                 </View>
-
-                {/* Mention comment drawer input box */}
-                {showMentionBoxForIdea === idea.id && (
-                  <View style={[styles.mentionInputBox, { borderTopColor: themeColors.neutralStroke2 }]}>
-                    <TextInput
-                      value={newMentionText}
-                      onChangeText={setNewMentionText}
-                      placeholder="Tag a friend by name..."
-                      placeholderTextColor={themeColors.neutralForegroundDisabled}
-                      style={[styles.mentionInput, { color: themeColors.neutralForeground1, borderColor: themeColors.neutralStroke1 }]}
-                    />
-                    <Button
-                      label="Tag"
-                      appearance="Primary"
-                      size="Small"
-                      onPress={() => handleAddMention(idea.id, 'Child Welfare')}
-                      isDarkMode={isDarkMode}
-                    />
-                  </View>
-                )}
 
               </Card>
             );
@@ -886,6 +1226,10 @@ export const Home: React.FC<HomeProps> = ({
             isDarkMode={isDarkMode}
             onBack={closeNotifications}
             onUnreadCountChange={(count) => setUnreadNotificationsCount(count)}
+            onViewIdea={(ideaId) => {
+              closeNotifications();
+              handleScrollToIdea(ideaId);
+            }}
           />
         </Animated.View>
       )}
@@ -1021,6 +1365,239 @@ export const Home: React.FC<HomeProps> = ({
             </ImageBackground>
           </View>
         </Modal>
+      )}
+
+      {/* Friend Picker Bottom Sheet Modal */}
+      {pickerIdeaId !== null && (
+        <Modal
+          visible={pickerIdeaId !== null}
+          transparent
+          animationType="fade"
+          onRequestClose={closePicker}
+        >
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={closePicker} />
+
+            <Animated.View
+              style={{
+                backgroundColor: themeColors.neutralBackground1,
+                borderTopLeftRadius: 20,
+                borderTopRightRadius: 20,
+                padding: Spacing.m,
+                maxHeight: '80%',
+                width: '100%',
+                borderWidth: 1,
+                borderColor: themeColors.neutralStroke2,
+                transform: [
+                  {
+                    translateY: pickerAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [600, 0],
+                    }),
+                  },
+                ],
+              }}
+            >
+              <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: themeColors.neutralStroke2, alignSelf: 'center', marginBottom: 12 }} />
+
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.s }}>
+                <Text style={[Typography.bodyStrong, { color: themeColors.neutralForeground1, fontSize: 18 }]}>
+                  Mention Friends
+                </Text>
+                <Pressable onPress={closePicker} style={{ padding: 4 }}>
+                  <Ionicons name="close" size={24} color={themeColors.neutralForeground2} />
+                </Pressable>
+              </View>
+
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  borderWidth: 1,
+                  borderColor: themeColors.neutralStroke1,
+                  borderRadius: Shapes.rounded,
+                  paddingHorizontal: Spacing.s,
+                  height: 40,
+                  marginBottom: Spacing.s,
+                  backgroundColor: isDarkMode ? '#222' : '#f5f5f5',
+                }}
+              >
+                <Ionicons name="search" size={18} color={themeColors.neutralForeground3} style={{ marginRight: 6 }} />
+                <TextInput
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholder="Search friends..."
+                  placeholderTextColor={themeColors.neutralForegroundDisabled}
+                  style={{ flex: 1, color: themeColors.neutralForeground1, fontSize: 14 }}
+                />
+              </View>
+
+              <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
+                {recentFriends.length > 0 && (
+                  <View style={{ marginBottom: Spacing.s }}>
+                    <Text style={[Typography.captionStrong, { color: themeColors.neutralForeground3, marginBottom: 6 }]}>
+                      Recently Interacted
+                    </Text>
+                    {recentFriends.map(friend => {
+                      const isChecked = selectedFriends.includes(friend.username);
+                      const toggleCheck = () => {
+                        if (isChecked) {
+                          setSelectedFriends(prev => prev.filter(u => u !== friend.username));
+                        } else {
+                          if (selectedFriends.length >= 10) {
+                            Alert.alert("Limit Reached", "You can mention up to 10 friends per idea thread.");
+                            return;
+                          }
+                          setSelectedFriends(prev => [...prev, friend.username]);
+                        }
+                      };
+
+                      return (
+                        <Pressable
+                          key={friend.username}
+                          onPress={toggleCheck}
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            paddingVertical: 10,
+                            borderBottomWidth: 1,
+                            borderBottomColor: themeColors.neutralStroke2,
+                          }}
+                        >
+                          <Image source={{ uri: friend.avatar }} style={{ width: 32, height: 32, borderRadius: 16 }} />
+                          <View style={{ flex: 1, marginLeft: Spacing.s }}>
+                            <Text style={[Typography.body, { color: themeColors.neutralForeground1 }]}>
+                              {friend.displayName}
+                            </Text>
+                            <Text style={[Typography.caption, { color: themeColors.neutralForeground3 }]}>
+                              @{friend.username}
+                            </Text>
+                          </View>
+                          <Ionicons
+                            name={isChecked ? "checkbox" : "square-outline"}
+                            size={22}
+                            color={isChecked ? themeColors.brandForeground1 : themeColors.neutralForeground3}
+                          />
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                )}
+
+                {allFriendsFiltered.length > 0 && (
+                  <View>
+                    <Text style={[Typography.captionStrong, { color: themeColors.neutralForeground3, marginBottom: 6 }]}>
+                      All Friends
+                    </Text>
+                    {allFriendsFiltered.map(friend => {
+                      const isChecked = selectedFriends.includes(friend.username);
+                      const toggleCheck = () => {
+                        if (isChecked) {
+                          setSelectedFriends(prev => prev.filter(u => u !== friend.username));
+                        } else {
+                          if (selectedFriends.length >= 10) {
+                            Alert.alert("Limit Reached", "You can mention up to 10 friends per idea thread.");
+                            return;
+                          }
+                          setSelectedFriends(prev => [...prev, friend.username]);
+                        }
+                      };
+
+                      return (
+                        <Pressable
+                          key={friend.username}
+                          onPress={toggleCheck}
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            paddingVertical: 10,
+                            borderBottomWidth: 1,
+                            borderBottomColor: themeColors.neutralStroke2,
+                          }}
+                        >
+                          <Image source={{ uri: friend.avatar }} style={{ width: 32, height: 32, borderRadius: 16 }} />
+                          <View style={{ flex: 1, marginLeft: Spacing.s }}>
+                            <Text style={[Typography.body, { color: themeColors.neutralForeground1 }]}>
+                              {friend.displayName}
+                            </Text>
+                            <Text style={[Typography.caption, { color: themeColors.neutralForeground3 }]}>
+                              @{friend.username}
+                            </Text>
+                          </View>
+                          <Ionicons
+                            name={isChecked ? "checkbox" : "square-outline"}
+                            size={22}
+                            color={isChecked ? themeColors.brandForeground1 : themeColors.neutralForeground3}
+                          />
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                )}
+              </ScrollView>
+
+              <View style={{ marginTop: Spacing.m, width: '100%', height: 44 }}>
+                <Button
+                  label={`Mention ${selectedFriends.length} friend${selectedFriends.length === 1 ? '' : 's'}`}
+                  appearance="Primary"
+                  onPress={handleDonePicker}
+                  isDarkMode={isDarkMode}
+                />
+              </View>
+            </Animated.View>
+          </View>
+        </Modal>
+      )}
+
+      {/* Undo Toast Notification */}
+      {toast !== null && (
+        <Animated.View
+          style={[
+            {
+              position: 'absolute',
+              bottom: 80,
+              left: Spacing.m,
+              right: Spacing.m,
+              backgroundColor: isDarkMode ? '#2d2d2d' : '#1e1e1e',
+              paddingVertical: 12,
+              paddingHorizontal: Spacing.m,
+              borderRadius: Shapes.rounded,
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.25,
+              shadowRadius: 4,
+              elevation: 5,
+              zIndex: 9999,
+              opacity: toastAnim,
+              transform: [
+                {
+                  translateY: toastAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [100, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          <Text style={{ color: '#ffffff', fontSize: 14, fontWeight: '500' }}>
+            {toast.message}
+          </Text>
+          <Pressable
+            onPress={() => {
+              toast.onUndo();
+              hideToast();
+            }}
+            style={{ padding: 4 }}
+          >
+            <Text style={{ color: themeColors.brandForeground1, fontSize: 14, fontWeight: 'bold' }}>
+              Undo
+            </Text>
+          </Pressable>
+        </Animated.View>
       )}
 
     </View>

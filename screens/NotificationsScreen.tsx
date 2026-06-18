@@ -19,28 +19,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { NotificationSettings } from './NotificationSettings';
 import { Badge } from '../components/Badge';
 import { Button } from '../components/Button';
+import { Personalization, NotificationItem } from '../services/personalization';
 
 const { width: screenWidth } = Dimensions.get('window');
-
-export interface NotificationItem {
-  id: string;
-  title: string;
-  body: string;
-  category:
-    | 'Opportunity Update'
-    | 'Community Announcement'
-    | 'Event Reminder'
-    | 'New Message'
-    | 'Connection Request'
-    | 'Achievement Badge'
-    | 'Application Status'
-    | 'System Alert';
-  timestamp: Date;
-  timeLabel: string;
-  unread: boolean;
-  senderName: string;
-  senderLogo: string;
-}
 
 // Custom swipeable item component using PanResponder
 interface SwipeableItemProps {
@@ -54,6 +35,7 @@ interface SwipeableItemProps {
   selectionMode: boolean;
   isSelected: boolean;
   onSelectToggle: () => void;
+  onViewIdea?: (ideaId: string) => void;
 }
 
 const SwipeableNotificationItem: React.FC<SwipeableItemProps> = ({
@@ -67,6 +49,7 @@ const SwipeableNotificationItem: React.FC<SwipeableItemProps> = ({
   selectionMode,
   isSelected,
   onSelectToggle,
+  onViewIdea,
 }) => {
   const panX = useRef(new Animated.Value(0)).current;
 
@@ -239,6 +222,36 @@ const SwipeableNotificationItem: React.FC<SwipeableItemProps> = ({
             <Text style={[styles.timestampText, { color: themeColors.neutralForeground3 }]}>
               {item.timeLabel}
             </Text>
+
+            {item.ideaId && (
+              <View style={{ flexDirection: 'row', marginTop: Spacing.s, gap: Spacing.s }}>
+                <Pressable
+                  onPress={() => {
+                    if (onViewIdea) onViewIdea(item.ideaId!);
+                  }}
+                  style={{
+                    backgroundColor: themeColors.brandBackground,
+                    paddingHorizontal: Spacing.s + 4,
+                    paddingVertical: 6,
+                    borderRadius: Shapes.rounded,
+                  }}
+                >
+                  <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: 'bold' }}>View</Text>
+                </Pressable>
+                <Pressable
+                  onPress={onDelete}
+                  style={{
+                    borderWidth: 1,
+                    borderColor: themeColors.neutralStroke1,
+                    paddingHorizontal: Spacing.s + 4,
+                    paddingVertical: 6,
+                    borderRadius: Shapes.rounded,
+                  }}
+                >
+                  <Text style={{ color: themeColors.neutralForeground2, fontSize: 12, fontWeight: 'bold' }}>Not interested</Text>
+                </Pressable>
+              </View>
+            )}
           </View>
         </Pressable>
       </Animated.View>
@@ -251,6 +264,7 @@ interface NotificationsScreenProps {
   isDarkMode?: boolean;
   onBack: () => void;
   onUnreadCountChange: (count: number) => void;
+  onViewIdea?: (ideaId: string) => void;
 }
 
 const INITIAL_MOCK_NOTIFICATIONS: NotificationItem[] = [
@@ -354,11 +368,12 @@ export const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
   isDarkMode = false,
   onBack,
   onUnreadCountChange,
+  onViewIdea,
 }) => {
   const themeColors = isDarkMode ? Colors.dark : Colors.light;
 
   // Screen states
-  const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_MOCK_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<NotificationItem[]>(Personalization.getNotifications());
   const [showSettings, setShowSettings] = useState(false);
   const [activeDetailNotification, setActiveDetailNotification] = useState<NotificationItem | null>(null);
 
@@ -370,10 +385,11 @@ export const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasLoadedOlder, setHasLoadedOlder] = useState(false);
 
-  // Update parent unread count badge
+  // Update parent unread count badge and personalization store
   useEffect(() => {
     const unreadCount = notifications.filter(n => n.unread).length;
     onUnreadCountChange(unreadCount);
+    Personalization.setNotifications(notifications);
   }, [notifications]);
 
   // --- Deletions and status edits ---
