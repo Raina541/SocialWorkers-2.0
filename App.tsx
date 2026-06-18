@@ -6,6 +6,7 @@ import {
   ScrollView,
   Dimensions,
   Pressable,
+  Animated,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Colors, Spacing, Typography, Shapes } from './constants/Theme';
@@ -56,6 +57,24 @@ function MainLayout() {
     { name: 'Profile', activeIcon: 'person', inactiveIcon: 'person-outline' },
   ];
 
+  // Fade animations for each tab page
+  const fadeAnims = useRef([
+    new Animated.Value(1), // Home
+    new Animated.Value(1), // Feed
+    new Animated.Value(1), // Community
+    new Animated.Value(1), // Blog
+    new Animated.Value(1), // Profile
+  ]).current;
+
+  const triggerFadeIn = (index: number) => {
+    fadeAnims[index].setValue(0.3); // start from 0.3 for a smoother fade effect
+    Animated.timing(fadeAnims[index], {
+      toValue: 1.0,
+      duration: 350,
+      useNativeDriver: true,
+    }).start();
+  };
+
   // Navigate to a specific section tab
   const handleTabPress = (index: number) => {
     setActiveTab(index);
@@ -63,6 +82,7 @@ function MainLayout() {
       x: index * screenWidth,
       animated: true,
     });
+    triggerFadeIn(index);
   };
 
   const handleScrollEnd = (event: any) => {
@@ -70,6 +90,7 @@ function MainLayout() {
     const index = Math.round(offsetX / screenWidth);
     if (index !== activeTab && index >= 0 && index < tabs.length) {
       setActiveTab(index);
+      triggerFadeIn(index);
     }
   };
 
@@ -99,34 +120,34 @@ function MainLayout() {
         overScrollMode="never"
         style={styles.pager}
       >
-        <View style={[styles.page, { width: screenWidth }]}>
+        <Animated.View style={[styles.page, { width: screenWidth, opacity: fadeAnims[0] }]}>
           <Home
             isDarkMode={isDarkMode}
             onNavigateToTab={handleTabPress}
             onSetPagerScrollEnabled={setPagerScrollEnabled}
           />
-        </View>
+        </Animated.View>
         
-        <View style={[styles.page, { width: screenWidth }]}>
+        <Animated.View style={[styles.page, { width: screenWidth, opacity: fadeAnims[1] }]}>
           <Feed isDarkMode={isDarkMode} />
-        </View>
+        </Animated.View>
         
-        <View style={[styles.page, { width: screenWidth }]}>
+        <Animated.View style={[styles.page, { width: screenWidth, opacity: fadeAnims[2] }]}>
           <Community isDarkMode={isDarkMode} />
-        </View>
+        </Animated.View>
         
-        <View style={[styles.page, { width: screenWidth }]}>
+        <Animated.View style={[styles.page, { width: screenWidth, opacity: fadeAnims[3] }]}>
           <Blog isDarkMode={isDarkMode} />
-        </View>
+        </Animated.View>
         
-        <View style={[styles.page, { width: screenWidth }]}>
+        <Animated.View style={[styles.page, { width: screenWidth, opacity: fadeAnims[4] }]}>
           <Profile
             isDarkMode={isDarkMode}
             onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
             presence={presence}
             onChangePresence={setPresence}
           />
-        </View>
+        </Animated.View>
       </ScrollView>
 
       {/* Bottom Navigation Bar */}
