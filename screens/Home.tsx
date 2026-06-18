@@ -167,6 +167,93 @@ const SupportButton: React.FC<SupportButtonProps> = ({
   );
 };
 
+// Sub-component to highlight matched characters in search
+interface HighlightTextProps {
+  text: string;
+  highlight: string;
+  style?: any;
+  highlightStyle?: any;
+}
+
+const HighlightText: React.FC<HighlightTextProps> = ({
+  text,
+  highlight,
+  style,
+  highlightStyle,
+}) => {
+  const cleanHighlight = highlight.replace(/^@/, '').trim();
+  if (!cleanHighlight) {
+    return <Text style={style}>{text}</Text>;
+  }
+
+  // Escape regex special chars
+  const escapedHighlight = cleanHighlight.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+  const parts = text.split(new RegExp(`(${escapedHighlight})`, 'gi'));
+
+  return (
+    <Text style={style}>
+      {parts.map((part, index) => {
+        const isMatch = part.toLowerCase() === cleanHighlight.toLowerCase();
+        return (
+          <Text key={index} style={isMatch ? [highlightStyle, { fontWeight: 'bold' }] : null}>
+            {part}
+          </Text>
+        );
+      })}
+    </Text>
+  );
+};
+
+// Skeleton Placeholder Row component for loading state
+interface SkeletonRowProps {
+  themeColors: any;
+}
+
+const SkeletonRow: React.FC<SkeletonRowProps> = ({ themeColors }) => {
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: themeColors.neutralStroke2,
+      }}
+    >
+      <View
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: 16,
+          backgroundColor: themeColors.neutralStroke2,
+          opacity: 0.6,
+        }}
+      />
+      <View style={{ flex: 1, marginLeft: Spacing.s }}>
+        <View
+          style={{
+            height: 12,
+            width: '60%',
+            backgroundColor: themeColors.neutralStroke2,
+            borderRadius: 6,
+            marginBottom: 6,
+            opacity: 0.6,
+          }}
+        />
+        <View
+          style={{
+            height: 10,
+            width: '40%',
+            backgroundColor: themeColors.neutralStroke2,
+            borderRadius: 5,
+            opacity: 0.6,
+          }}
+        />
+      </View>
+    </View>
+  );
+};
+
 const CARD_WIDTH = ((screenWidth - Spacing.m * 2 - Spacing.s * 1.3) / 2.3) * 0.9;
 
 // Unsplash cause icon mapping
@@ -447,22 +534,48 @@ export const Home: React.FC<HomeProps> = ({
 
   // Friend Picker state
   const [pickerIdeaId, setPickerIdeaId] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchInputValue, setSearchInputValue] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
+  const [isLoadingPickerResults, setIsLoadingPickerResults] = useState(false);
+  const [accessibilityAnnouncement, setAccessibilityAnnouncement] = useState('');
   const pickerAnim = useRef(new Animated.Value(0)).current;
+
+  const searchInputRef = useRef<TextInput>(null);
+
+  // Debouncing search input by 150ms to avoid typing jitter
+  useEffect(() => {
+    if (pickerIdeaId === null) return;
+
+    setIsLoadingPickerResults(true);
+    const handler = setTimeout(() => {
+      setDebouncedSearchQuery(searchInputValue);
+      setIsLoadingPickerResults(false);
+    }, 150);
+
+    return () => clearTimeout(handler);
+  }, [searchInputValue, pickerIdeaId]);
 
   const openPicker = (ideaId: string) => {
     const idea = ideas.find(i => i.id === ideaId);
     if (!idea) return;
     setPickerIdeaId(ideaId);
-    setSearchQuery('');
+    setSearchInputValue('');
+    setDebouncedSearchQuery('');
     setSelectedFriends([...idea.taggedFriends]);
+    setIsLoadingPickerResults(false);
+    setAccessibilityAnnouncement('');
     pickerAnim.setValue(0);
     Animated.timing(pickerAnim, {
       toValue: 1,
       duration: 350,
       useNativeDriver: true,
     }).start();
+
+    // Auto-focus search input when opening
+    setTimeout(() => {
+      searchInputRef.current?.focus();
+    }, 150);
   };
 
   const closePicker = () => {
@@ -788,10 +901,24 @@ export const Home: React.FC<HomeProps> = ({
   );
 
   const getFriendsLists = () => {
-    const query = searchQuery.toLowerCase().trim();
-    const filtered = MOCK_FRIENDS.filter(f =>
-      f.displayName.toLowerCase().includes(query) || f.username.toLowerCase().includes(query)
-    );
+    const isAtSearch = debouncedSearchQuery.startsWith('@');
+    const query = debouncedSearchQuery.replace(/^@/, '').toLowerCase().trim();
+    if (query === '') {
+      const recent = MOCK_FRIENDS.filter(f => f.recentInteraction);
+      const others = MOCK_FRIENDS.filter(f => !f.recentInteraction).sort((a, b) => a.displayName.localeCompare(b.displayName));
+      return { recent, others };
+    }
+
+    const filtered = MOCK_FRIENDS.filter(f => {
+      if (isAtSearch) {
+        return f.username.toLowerCase().startsWith(query);
+      } else {
+        return (
+          f.displayName.toLowerCase().includes(query) ||
+          f.username.toLowerCase().includes(query)
+        );
+      }
+    });
 
     const recent = filtered.filter(f => f.recentInteraction);
     const others = filtered.filter(f => !f.recentInteraction).sort((a, b) => a.displayName.localeCompare(b.displayName));
@@ -799,7 +926,21 @@ export const Home: React.FC<HomeProps> = ({
     return { recent, others };
   };
 
+
   const { recent: recentFriends, others: allFriendsFiltered } = getFriendsLists();
+
+  // Screen Reader Accessibility Announcements
+  useEffect(() => {
+    if (pickerIdeaId === null) return;
+    if (isLoadingPickerResults) return;
+
+    const totalCount = recentFriends.length + allFriendsFiltered.length;
+    if (totalCount === 0) {
+      setAccessibilityAnnouncement("No friends found");
+    } else {
+      setAccessibilityAnnouncement(`${totalCount} friend${totalCount === 1 ? '' : 's'} found`);
+    }
+  }, [debouncedSearchQuery, isLoadingPickerResults, pickerIdeaId, recentFriends.length, allFriendsFiltered.length]);
 
   return (
     <View style={[styles.container, { backgroundColor: themeColors.neutralBackground2 }]}>
@@ -1424,21 +1565,137 @@ export const Home: React.FC<HomeProps> = ({
               >
                 <Ionicons name="search" size={18} color={themeColors.neutralForeground3} style={{ marginRight: 6 }} />
                 <TextInput
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
+                  ref={searchInputRef}
+                  value={searchInputValue}
+                  onChangeText={setSearchInputValue}
                   placeholder="Search friends..."
                   placeholderTextColor={themeColors.neutralForegroundDisabled}
                   style={{ flex: 1, color: themeColors.neutralForeground1, fontSize: 14 }}
+                  keyboardType="default"
+                  autoComplete="off"
+                  accessibilityLabel="Search friends"
+                  accessibilityRole="search"
+                  autoFocus={true}
                 />
+                {searchInputValue.length > 0 && (
+                  <Pressable
+                    onPress={() => {
+                      setSearchInputValue('');
+                      setDebouncedSearchQuery('');
+                      searchInputRef.current?.focus();
+                    }}
+                    style={{ padding: 4 }}
+                  >
+                    <Ionicons name="close-circle" size={18} color={themeColors.neutralForeground3} />
+                  </Pressable>
+                )}
               </View>
 
-              <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
-                {recentFriends.length > 0 && (
-                  <View style={{ marginBottom: Spacing.s }}>
-                    <Text style={[Typography.captionStrong, { color: themeColors.neutralForeground3, marginBottom: 6 }]}>
-                      Recently Interacted
+              {/* Selected Friends Chips Row */}
+              {selectedFriends.length > 0 && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.s, paddingVertical: 4 }}>
+                  <Text style={[Typography.captionStrong, { color: themeColors.neutralForeground2, marginRight: 8, fontSize: 11 }]}>
+                    Selected:
+                  </Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: 'center' }}>
+                    {selectedFriends.map(username => {
+                      return (
+                        <Pressable
+                          key={username}
+                          onPress={() => setSelectedFriends(prev => prev.filter(u => u !== username))}
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            backgroundColor: themeColors.brandBackgroundSubtle,
+                            paddingHorizontal: 8,
+                            paddingVertical: 3,
+                            borderRadius: 12,
+                            marginRight: 6,
+                          }}
+                        >
+                          <Text style={[Typography.captionStrong, { color: themeColors.brandForeground1, fontSize: 11 }]}>
+                            @{username}
+                          </Text>
+                          <Ionicons name="close" size={12} color={themeColors.brandForeground1} style={{ marginLeft: 4 }} />
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              )}
+
+              {/* Accessibility Announcer */}
+              <Text
+                accessibilityLiveRegion="polite"
+                style={{ position: 'absolute', width: 1, height: 1, opacity: 0, overflow: 'hidden' }}
+              >
+                {accessibilityAnnouncement}
+              </Text>
+
+              <ScrollView style={{ maxHeight: 300 }} showsVerticalScrollIndicator={false}>
+                {isLoadingPickerResults ? (
+                  <View>
+                    <SkeletonRow themeColors={themeColors} />
+                    <SkeletonRow themeColors={themeColors} />
+                    <SkeletonRow themeColors={themeColors} />
+                  </View>
+                ) : MOCK_FRIENDS.length === 0 ? (
+                  /* Empty state: No Friends Added at all */
+                  <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: Spacing.xl }}>
+                    <Ionicons name="people-outline" size={48} color={themeColors.neutralForegroundDisabled} style={{ marginBottom: Spacing.s }} />
+                    <Text style={[Typography.bodyStrong, { color: themeColors.neutralForeground1, textAlign: 'center' }]}>
+                      You haven't added any friends yet
                     </Text>
-                    {recentFriends.map(friend => {
+                    <Pressable
+                      onPress={() => {
+                        closePicker();
+                        Alert.alert("Find Friends", "Redirecting to Find Friends screen...");
+                      }}
+                      style={{ marginTop: Spacing.xs }}
+                    >
+                      <Text style={[Typography.body, { color: themeColors.brandForeground1, fontWeight: 'bold' }]}>
+                        Find Friends
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : recentFriends.length === 0 && allFriendsFiltered.length === 0 ? (
+                  /* Empty state: No Results for Query */
+                  <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: Spacing.xl }}>
+                    <Ionicons name="search-outline" size={48} color={themeColors.neutralForegroundDisabled} style={{ marginBottom: Spacing.s }} />
+                    <Text style={[Typography.bodyStrong, { color: themeColors.neutralForeground1, textAlign: 'center' }]}>
+                      No friends found
+                    </Text>
+                    <Text style={[Typography.caption, { color: themeColors.neutralForeground3, textAlign: 'center', marginTop: 4, paddingHorizontal: Spacing.m }]}>
+                      No one in your friends list matches "{debouncedSearchQuery}".
+                    </Text>
+                    {debouncedSearchQuery.trim().length > 0 && (
+                      <Pressable
+                        onPress={() => {
+                          closePicker();
+                          showToast(`Invite sent to "${debouncedSearchQuery}"`, () => {});
+                        }}
+                        style={{
+                          marginTop: Spacing.s,
+                          borderWidth: 1.5,
+                          borderColor: themeColors.brandForeground1,
+                          paddingHorizontal: Spacing.m,
+                          paddingVertical: 8,
+                          borderRadius: 18,
+                        }}
+                      >
+                        <Text style={[Typography.captionStrong, { color: themeColors.brandForeground1 }]}>
+                          Invite "{debouncedSearchQuery}" to SocialWorkers
+                        </Text>
+                      </Pressable>
+                    )}
+                  </View>
+                ) : debouncedSearchQuery.trim().length > 0 ? (
+                  /* Query results view */
+                  <View>
+                    <Text style={[Typography.captionStrong, { color: themeColors.neutralForeground3, marginBottom: 8 }]}>
+                      Results for "{debouncedSearchQuery}"
+                    </Text>
+                    {[...recentFriends, ...allFriendsFiltered].map(friend => {
                       const isChecked = selectedFriends.includes(friend.username);
                       const toggleCheck = () => {
                         if (isChecked) {
@@ -1466,12 +1723,18 @@ export const Home: React.FC<HomeProps> = ({
                         >
                           <Image source={{ uri: friend.avatar }} style={{ width: 32, height: 32, borderRadius: 16 }} />
                           <View style={{ flex: 1, marginLeft: Spacing.s }}>
-                            <Text style={[Typography.body, { color: themeColors.neutralForeground1 }]}>
-                              {friend.displayName}
-                            </Text>
-                            <Text style={[Typography.caption, { color: themeColors.neutralForeground3 }]}>
-                              @{friend.username}
-                            </Text>
+                            <HighlightText
+                              text={friend.displayName}
+                              highlight={debouncedSearchQuery}
+                              style={[Typography.body, { color: themeColors.neutralForeground1 }]}
+                              highlightStyle={{ color: themeColors.brandForeground1 }}
+                            />
+                            <HighlightText
+                              text={`@${friend.username}`}
+                              highlight={debouncedSearchQuery}
+                              style={[Typography.caption, { color: themeColors.neutralForeground3 }]}
+                              highlightStyle={{ color: themeColors.brandForeground1 }}
+                            />
                           </View>
                           <Ionicons
                             name={isChecked ? "checkbox" : "square-outline"}
@@ -1482,66 +1745,125 @@ export const Home: React.FC<HomeProps> = ({
                       );
                     })}
                   </View>
-                )}
-
-                {allFriendsFiltered.length > 0 && (
+                ) : (
+                  /* Default view (empty query) */
                   <View>
-                    <Text style={[Typography.captionStrong, { color: themeColors.neutralForeground3, marginBottom: 6 }]}>
-                      All Friends
-                    </Text>
-                    {allFriendsFiltered.map(friend => {
-                      const isChecked = selectedFriends.includes(friend.username);
-                      const toggleCheck = () => {
-                        if (isChecked) {
-                          setSelectedFriends(prev => prev.filter(u => u !== friend.username));
-                        } else {
-                          if (selectedFriends.length >= 10) {
-                            Alert.alert("Limit Reached", "You can mention up to 10 friends per idea thread.");
-                            return;
-                          }
-                          setSelectedFriends(prev => [...prev, friend.username]);
-                        }
-                      };
+                    {recentFriends.length > 0 && (
+                      <View style={{ marginBottom: Spacing.s }}>
+                        <Text style={[Typography.captionStrong, { color: themeColors.neutralForeground3, marginBottom: 6 }]}>
+                          Recently Interacted
+                        </Text>
+                        {recentFriends.map(friend => {
+                          const isChecked = selectedFriends.includes(friend.username);
+                          const toggleCheck = () => {
+                            if (isChecked) {
+                              setSelectedFriends(prev => prev.filter(u => u !== friend.username));
+                            } else {
+                              if (selectedFriends.length >= 10) {
+                                Alert.alert("Limit Reached", "You can mention up to 10 friends per idea thread.");
+                                return;
+                              }
+                              setSelectedFriends(prev => [...prev, friend.username]);
+                            }
+                          };
 
-                      return (
-                        <Pressable
-                          key={friend.username}
-                          onPress={toggleCheck}
-                          style={{
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            paddingVertical: 10,
-                            borderBottomWidth: 1,
-                            borderBottomColor: themeColors.neutralStroke2,
-                          }}
-                        >
-                          <Image source={{ uri: friend.avatar }} style={{ width: 32, height: 32, borderRadius: 16 }} />
-                          <View style={{ flex: 1, marginLeft: Spacing.s }}>
-                            <Text style={[Typography.body, { color: themeColors.neutralForeground1 }]}>
-                              {friend.displayName}
-                            </Text>
-                            <Text style={[Typography.caption, { color: themeColors.neutralForeground3 }]}>
-                              @{friend.username}
-                            </Text>
-                          </View>
-                          <Ionicons
-                            name={isChecked ? "checkbox" : "square-outline"}
-                            size={22}
-                            color={isChecked ? themeColors.brandForeground1 : themeColors.neutralForeground3}
-                          />
-                        </Pressable>
-                      );
-                    })}
+                          return (
+                            <Pressable
+                              key={friend.username}
+                              onPress={toggleCheck}
+                              style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                paddingVertical: 10,
+                                borderBottomWidth: 1,
+                                borderBottomColor: themeColors.neutralStroke2,
+                              }}
+                            >
+                              <Image source={{ uri: friend.avatar }} style={{ width: 32, height: 32, borderRadius: 16 }} />
+                              <View style={{ flex: 1, marginLeft: Spacing.s }}>
+                                <Text style={[Typography.body, { color: themeColors.neutralForeground1 }]}>
+                                  {friend.displayName}
+                                </Text>
+                                <Text style={[Typography.caption, { color: themeColors.neutralForeground3 }]}>
+                                  @{friend.username}
+                                </Text>
+                              </View>
+                              <Ionicons
+                                name={isChecked ? "checkbox" : "square-outline"}
+                                size={22}
+                                color={isChecked ? themeColors.brandForeground1 : themeColors.neutralForeground3}
+                              />
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    )}
+
+                    {allFriendsFiltered.length > 0 && (
+                      <View>
+                        <Text style={[Typography.captionStrong, { color: themeColors.neutralForeground3, marginBottom: 6 }]}>
+                          All Friends
+                        </Text>
+                        {allFriendsFiltered.map(friend => {
+                          const isChecked = selectedFriends.includes(friend.username);
+                          const toggleCheck = () => {
+                            if (isChecked) {
+                              setSelectedFriends(prev => prev.filter(u => u !== friend.username));
+                            } else {
+                              if (selectedFriends.length >= 10) {
+                                Alert.alert("Limit Reached", "You can mention up to 10 friends per idea thread.");
+                                return;
+                              }
+                              setSelectedFriends(prev => [...prev, friend.username]);
+                            }
+                          };
+
+                          return (
+                            <Pressable
+                              key={friend.username}
+                              onPress={toggleCheck}
+                              style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                paddingVertical: 10,
+                                borderBottomWidth: 1,
+                                borderBottomColor: themeColors.neutralStroke2,
+                              }}
+                            >
+                              <Image source={{ uri: friend.avatar }} style={{ width: 32, height: 32, borderRadius: 16 }} />
+                              <View style={{ flex: 1, marginLeft: Spacing.s }}>
+                                <Text style={[Typography.body, { color: themeColors.neutralForeground1 }]}>
+                                  {friend.displayName}
+                                </Text>
+                                <Text style={[Typography.caption, { color: themeColors.neutralForeground3 }]}>
+                                  @{friend.username}
+                                </Text>
+                              </View>
+                              <Ionicons
+                                name={isChecked ? "checkbox" : "square-outline"}
+                                size={22}
+                                color={isChecked ? themeColors.brandForeground1 : themeColors.neutralForeground3}
+                              />
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    )}
                   </View>
                 )}
               </ScrollView>
 
               <View style={{ marginTop: Spacing.m, width: '100%', height: 44 }}>
                 <Button
-                  label={`Mention ${selectedFriends.length} friend${selectedFriends.length === 1 ? '' : 's'}`}
+                  label={
+                    selectedFriends.length === 0
+                      ? "Mention friends"
+                      : `Mention ${selectedFriends.length} friend${selectedFriends.length === 1 ? '' : 's'}`
+                  }
                   appearance="Primary"
                   onPress={handleDonePicker}
                   isDarkMode={isDarkMode}
+                  disabled={selectedFriends.length === 0}
                 />
               </View>
             </Animated.View>
