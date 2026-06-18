@@ -6,6 +6,66 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Opportunity } from '../services/personalization';
 
+const getOpportunityStory = (opp: Opportunity): string => {
+  const staticStories: Record<string, string> = {
+    opp_1: "Spend a few hours helping local students build confidence and discover the joy of reading.",
+    opp_2: "Help us sort and package essential medicines and diagnostics to support clinics in nearby rural communities.",
+    opp_3: "Join us in distributing warm dinner packets to neighbors staying at our community transit shelters tonight.",
+    opp_4: "Help plant a native urban forest by digging and planting saplings to cool down our city streets.",
+    opp_5: "Support local farmers by reviewing hailstorm damage reports from home to approve critical relief seed vouchers.",
+    opp_6: "Review textbook audio transcriptions online to ensure visually impaired college students have access to vital learning materials.",
+    opp_7: "Design simple local posters from home to help spread the word about our stray dog rabies vaccination drive.",
+  };
+
+  if (opp.id && staticStories[opp.id]) {
+    return staticStories[opp.id];
+  }
+
+  // Fallback generator for dynamic/incomplete opportunities
+  const title = opp.title || "";
+  const desc = opp.description || "";
+  const cause = opp.cause || "";
+
+  // 1. If description is high quality and already has target word count (12 to 25 words), clean it and return it
+  if (desc) {
+    let cleanDesc = desc
+      .replace(/(seeking|looking for|needs|requires)\s+volunteers\s+(to|for)\s+/i, "")
+      .replace(/volunteer\s+opportunity\s+to\s+/i, "")
+      .replace(/^volunteers\s+will\s+/i, "")
+      .replace(/we\s+are\s+recruiting\s+/i, "")
+      .replace(/is\s+seeking\s+help\s+with\s+/i, "")
+      .trim();
+
+    if (cleanDesc.length > 0) {
+      cleanDesc = cleanDesc.charAt(0).toUpperCase() + cleanDesc.slice(1);
+      if (!cleanDesc.endsWith('.')) {
+        cleanDesc += '.';
+      }
+
+      const wordCount = cleanDesc.split(/\s+/).length;
+      if (wordCount >= 10 && wordCount <= 25) {
+        return cleanDesc;
+      }
+    }
+  }
+
+  // 2. Otherwise generate structured story sentence using cause and title
+  const cleanCause = cause.toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/support for/i, "")
+    .trim();
+
+  const action = title.toLowerCase()
+    .replace(/drive/i, "drives")
+    .trim();
+
+  if (opp.isRemote) {
+    return `Join our mission to ${action} and help support ${cleanCause} from your home.`;
+  } else {
+    return `Spend a few hours helping us ${action} to support ${cleanCause} in our community.`;
+  }
+};
+
 interface OpportunityCardProps {
   opportunity: Opportunity;
   onPress?: () => void;
@@ -18,17 +78,13 @@ export const OpportunityCard: React.FC<OpportunityCardProps> = ({
   isDarkMode = false,
 }) => {
   const themeColors = isDarkMode ? Colors.dark : Colors.light;
+  const storySentence = getOpportunityStory(opportunity);
 
   return (
     <Card variant="Filled" size="Medium" onPress={onPress} isDarkMode={isDarkMode} style={styles.card}>
-      {/* 1. Large Bold Heading (18-20px) */}
-      <Text style={[styles.title, { color: themeColors.neutralForeground1 }]}>
-        {opportunity.title}
-      </Text>
-
-      {/* 2. Descriptive storytelling need text (2-3 lines) */}
-      <Text style={[styles.description, { color: themeColors.neutralForeground2 }]} numberOfLines={3}>
-        "{opportunity.description}"
+      {/* Primary Story-style Content */}
+      <Text style={[styles.storyText, { color: themeColors.neutralForeground1 }]}>
+        {storySentence}
       </Text>
 
       {/* 3. Meta Information Row (Clock and Location chips) */}
@@ -124,16 +180,9 @@ const styles = StyleSheet.create({
     marginVertical: Spacing.s / 2,
     borderWidth: 1,
   },
-  title: {
-    fontSize: 18,
-    fontWeight: '700',
-    lineHeight: 24,
-    marginBottom: Spacing.xs,
-  },
-  description: {
-    ...Typography.body,
-    fontStyle: 'italic',
-    lineHeight: 20,
+  storyText: {
+    ...Typography.bodyStrong,
+    lineHeight: 22,
     marginBottom: Spacing.s,
   },
   metaRow: {
