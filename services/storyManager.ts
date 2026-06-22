@@ -10,7 +10,12 @@ export interface Story {
   contributorsAvatars: string[];
   location: string;
   timestamp: string;
+  publishedAt: number; // epoch timestamp in ms
+  tags: string[];      // interest tags
 }
+
+// Generate dynamic timestamps so stories are always fresh relative to execution time
+const now = Date.now();
 
 const MOCK_STORIES_DB: Record<CauseType, Story[]> = {
   'Education': [
@@ -26,7 +31,9 @@ const MOCK_STORIES_DB: Record<CauseType, Story[]> = {
         'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80',
       ],
       location: 'Morena, MP',
-      timestamp: 'Yesterday',
+      timestamp: '12 hours ago',
+      publishedAt: now - 12 * 3600 * 1000,
+      tags: ['digital', 'rural', 'children', 'tablet'],
     },
     {
       id: 'edu_2',
@@ -41,7 +48,9 @@ const MOCK_STORIES_DB: Record<CauseType, Story[]> = {
         'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=80',
       ],
       location: 'Gwalior, India',
-      timestamp: '3 days ago',
+      timestamp: '2 days ago',
+      publishedAt: now - 2 * 24 * 3600 * 1000,
+      tags: ['volunteers', 'night', 'children', 'literacy'],
     },
     {
       id: 'edu_3',
@@ -53,6 +62,8 @@ const MOCK_STORIES_DB: Record<CauseType, Story[]> = {
       contributorsAvatars: [],
       location: 'Bhind, India',
       timestamp: '5 days ago',
+      publishedAt: now - 5 * 24 * 3600 * 1000,
+      tags: ['library', 'mobile', 'rural', 'reading'],
     },
   ],
   'Healthcare': [
@@ -68,7 +79,9 @@ const MOCK_STORIES_DB: Record<CauseType, Story[]> = {
         'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=80',
       ],
       location: 'Shivpuri Forest Area',
-      timestamp: '2 days ago',
+      timestamp: '1 day ago',
+      publishedAt: now - 1 * 24 * 3600 * 1000,
+      tags: ['diagnostics', 'forest', 'tribal', 'clinic'],
     },
   ],
   'Child Welfare': [
@@ -84,7 +97,9 @@ const MOCK_STORIES_DB: Record<CauseType, Story[]> = {
         'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80',
       ],
       location: 'Gwalior Industrial Area',
-      timestamp: '4 days ago',
+      timestamp: '3 days ago',
+      publishedAt: now - 3 * 24 * 3600 * 1000,
+      tags: ['labor', 'market', 'rescue', 'welfare'],
     },
   ],
   'Poverty Alleviation & Livelihoods': [
@@ -101,6 +116,8 @@ const MOCK_STORIES_DB: Record<CauseType, Story[]> = {
       ],
       location: 'Dabra Rural Block',
       timestamp: 'Yesterday',
+      publishedAt: now - 20 * 3600 * 1000,
+      tags: ['weaving', 'exports', 'online', 'livelihood'],
     },
   ],
   'Women Empowerment': [
@@ -116,7 +133,9 @@ const MOCK_STORIES_DB: Record<CauseType, Story[]> = {
         'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=80',
       ],
       location: 'Gwalior City Centre',
-      timestamp: '5 days ago',
+      timestamp: '4 days ago',
+      publishedAt: now - 4 * 24 * 3600 * 1000,
+      tags: ['literacy', 'finance', 'entrepreneur', 'digital'],
     },
   ],
   'Disaster Relief': [
@@ -132,7 +151,9 @@ const MOCK_STORIES_DB: Record<CauseType, Story[]> = {
         'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=80',
       ],
       location: 'Ghatigaon Sub-district',
-      timestamp: '1 week ago',
+      timestamp: '6 days ago',
+      publishedAt: now - 6 * 24 * 3600 * 1000,
+      tags: ['hailstorm', 'food', 'emergency', 'relief'],
     },
   ],
   'Environment & Sustainability': [
@@ -149,7 +170,9 @@ const MOCK_STORIES_DB: Record<CauseType, Story[]> = {
         'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=80',
       ],
       location: 'Lashkar, Gwalior',
-      timestamp: 'Yesterday',
+      timestamp: '18 hours ago',
+      publishedAt: now - 18 * 3600 * 1000,
+      tags: ['miyawaki', 'forest', 'heatwave', 'urban'],
     },
     {
       id: 'env_2',
@@ -164,6 +187,8 @@ const MOCK_STORIES_DB: Record<CauseType, Story[]> = {
       ],
       location: 'Morar Rural Area',
       timestamp: '4 days ago',
+      publishedAt: now - 4 * 24 * 3600 * 1000,
+      tags: ['rainwater', 'wells', 'drought', 'water'],
     },
   ],
   'Animal Welfare': [
@@ -180,6 +205,8 @@ const MOCK_STORIES_DB: Record<CauseType, Story[]> = {
       ],
       location: 'Gwalior Highway Link',
       timestamp: '3 days ago',
+      publishedAt: now - 3 * 24 * 3600 * 1000,
+      tags: ['vaccination', 'collar', 'highway', 'cattle'],
     },
   ],
   'Support for Persons with Disabilities': [
@@ -195,7 +222,9 @@ const MOCK_STORIES_DB: Record<CauseType, Story[]> = {
         'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=80',
       ],
       location: 'Deen Dayal Nagar',
-      timestamp: '6 days ago',
+      timestamp: '5 days ago',
+      publishedAt: now - 5 * 24 * 3600 * 1000,
+      tags: ['audiobook', 'recording', 'students', 'board'],
     },
   ],
   'Elderly Care': [
@@ -212,6 +241,8 @@ const MOCK_STORIES_DB: Record<CauseType, Story[]> = {
       ],
       location: 'Morar Town old age home',
       timestamp: '2 days ago',
+      publishedAt: now - 2 * 24 * 3600 * 1000,
+      tags: ['grandparent', 'senior', 'youth', 'elderly'],
     },
   ],
   'Water, Sanitation, and Hygiene (WASH)': [
@@ -228,6 +259,8 @@ const MOCK_STORIES_DB: Record<CauseType, Story[]> = {
       ],
       location: 'Behat Block, Gwalior',
       timestamp: '4 days ago',
+      publishedAt: now - 4 * 24 * 3600 * 1000,
+      tags: ['filter', 'water', 'hamlet', 'sanitation'],
     },
   ],
   'Rural Development': [
@@ -244,6 +277,8 @@ const MOCK_STORIES_DB: Record<CauseType, Story[]> = {
       ],
       location: 'Pichhore Village Circle',
       timestamp: 'Yesterday',
+      publishedAt: now - 22 * 3600 * 1000,
+      tags: ['seed', 'millet', 'grain', 'rural'],
     },
   ],
 };
@@ -255,7 +290,6 @@ class StoryManager {
   private lastRefreshTime: number = new Date().getTime();
 
   constructor() {
-    // Initialize default last read indexes to 0
     const causes: CauseType[] = [
       'Education', 'Healthcare', 'Child Welfare', 'Poverty Alleviation & Livelihoods',
       'Women Empowerment', 'Disaster Relief', 'Environment & Sustainability', 'Animal Welfare',
@@ -269,37 +303,154 @@ class StoryManager {
     });
   }
 
-  // Get stories for a cause
-  public getStories(cause: CauseType): Story[] {
-    this.checkWeeklyRefresh();
-    // Return mock stories, default to Education if not found
-    return MOCK_STORIES_DB[cause] || MOCK_STORIES_DB['Education'];
+  // Local Storage helper for seen stories
+  public getSeenStoryIds(): string[] {
+    try {
+      if (typeof localStorage !== 'undefined' && localStorage !== null) {
+        const val = localStorage.getItem('seenStoryIds');
+        if (val) return JSON.parse(val);
+      }
+    } catch (e) {}
+    return (global as any)['__storage_seenStoryIds'] || [];
   }
 
-  // Retrieve the last read index for "Continue where you left off"
+  public markStorySeen(storyId: string) {
+    const seen = this.getSeenStoryIds();
+    if (!seen.includes(storyId)) {
+      seen.push(storyId);
+      try {
+        if (typeof localStorage !== 'undefined' && localStorage !== null) {
+          localStorage.setItem('seenStoryIds', JSON.stringify(seen));
+        }
+      } catch (e) {}
+      (global as any)['__storage_seenStoryIds'] = seen;
+    }
+  }
+
+  // Local Storage helper for tag interest weights
+  public getInterestWeights(): Record<string, number> {
+    try {
+      if (typeof localStorage !== 'undefined' && localStorage !== null) {
+        const val = localStorage.getItem('interestWeights');
+        if (val) return JSON.parse(val);
+      }
+    } catch (e) {}
+    return (global as any)['__storage_interestWeights'] || {};
+  }
+
+  public incrementTagWeight(tag: string, amount: number) {
+    const weights = this.getInterestWeights();
+    const cleanTag = tag.toLowerCase();
+    weights[cleanTag] = (weights[cleanTag] || 0) + amount;
+    try {
+      if (typeof localStorage !== 'undefined' && localStorage !== null) {
+        localStorage.setItem('interestWeights', JSON.stringify(weights));
+      }
+    } catch (e) {}
+    (global as any)['__storage_interestWeights'] = weights;
+  }
+
+  // Weekly interest weights decay
+  private checkWeeklyDecay() {
+    const currentTime = new Date().getTime();
+    const sevenDaysInMs = 7 * 24 * 60 * 60 * 1000;
+    let lastDecay = currentTime;
+
+    try {
+      if (typeof localStorage !== 'undefined' && localStorage !== null) {
+        const val = localStorage.getItem('lastInterestDecayTime');
+        if (val) lastDecay = parseInt(val);
+      }
+    } catch (e) {}
+
+    if (currentTime - lastDecay > sevenDaysInMs) {
+      const weights = this.getInterestWeights();
+      const decayed: Record<string, number> = {};
+      Object.keys(weights).forEach(k => {
+        decayed[k] = parseFloat((weights[k] * 0.8).toFixed(2));
+      });
+      try {
+        if (typeof localStorage !== 'undefined' && localStorage !== null) {
+          localStorage.setItem('interestWeights', JSON.stringify(decayed));
+          localStorage.setItem('lastInterestDecayTime', currentTime.toString());
+        }
+      } catch (e) {}
+      (global as any)['__storage_interestWeights'] = decayed;
+    }
+  }
+
+  // Recompute sorted order of stories for cause
+  public getSortedStoriesForCause(cause: CauseType): Story[] {
+    this.checkWeeklyDecay();
+    const rawStories = MOCK_STORIES_DB[cause] || MOCK_STORIES_DB['Education'];
+    
+    const seenIds = this.getSeenStoryIds();
+    const weights = this.getInterestWeights();
+
+    // Dwell / followed causes: Pinned cause gets priority boost
+    const isPinned = (global as any)['__storage_pinnedCause'] === cause;
+    const causeBoost = isPinned ? 50 : 0;
+
+    const getStoryInterestScore = (story: Story) => {
+      let score = 0;
+      story.tags.forEach(t => {
+        score += weights[t.toLowerCase()] || 0;
+      });
+      score += causeBoost;
+      return score;
+    };
+
+    const unread = rawStories.filter(s => !seenIds.includes(s.id));
+    const read = rawStories.filter(s => seenIds.includes(s.id));
+
+    // Sort unread: newest first, boosted by interest weights (1 weight point = 12 hours freshness boost)
+    unread.sort((a, b) => {
+      const hoursA = a.publishedAt / (1000 * 3600);
+      const hoursB = b.publishedAt / (1000 * 3600);
+      const scoreA = hoursA + getStoryInterestScore(a) * 12;
+      const scoreB = hoursB + getStoryInterestScore(b) * 12;
+      return scoreB - scoreA;
+    });
+
+    // Sort read: newest first at the end of the list
+    read.sort((a, b) => b.publishedAt - a.publishedAt);
+
+    return [...unread, ...read];
+  }
+
+  // Legacy fallback method for compatibility
+  public getStories(cause: CauseType): Story[] {
+    return this.getSortedStoriesForCause(cause);
+  }
+
   public getLastReadIndex(cause: CauseType): number {
     this.checkWeeklyRefresh();
     return this.lastReadIndexes[cause] || 0;
   }
 
-  // Save the progress
   public saveProgress(cause: CauseType, index: number) {
     const totalStories = this.getStories(cause).length;
-    // Loop back or save current index
     const clampedIndex = Math.min(Math.max(0, index), totalStories - 1);
     this.lastReadIndexes[cause] = clampedIndex;
   }
 
-  // Seen state management
   public isCauseSeen(cause: CauseType): boolean {
-    return !!this.seenCauses[cause];
+    // A cause is seen if all its stories have been marked seen
+    const stories = MOCK_STORIES_DB[cause] || [];
+    if (stories.length === 0) return false;
+    const seenIds = this.getSeenStoryIds();
+    return stories.every(s => seenIds.includes(s.id));
   }
 
   public markCauseSeen(cause: CauseType, seen: boolean) {
+    // If marking cause seen, we mark all its individual stories seen
+    if (seen) {
+      const stories = MOCK_STORIES_DB[cause] || [];
+      stories.forEach(s => this.markStorySeen(s.id));
+    }
     this.seenCauses[cause] = seen;
   }
 
-  // Bookmark state management
   public isCauseBookmarked(cause: CauseType): boolean {
     return !!this.bookmarkedCauses[cause];
   }
@@ -310,28 +461,38 @@ class StoryManager {
     return !current;
   }
 
-  // Weekly refresh logic: reset read indexes every 7 days
   private checkWeeklyRefresh() {
     const currentTime = new Date().getTime();
     const sevenDaysInMs = 7 * 24 * 60 * 60 * 1000;
     
     if (currentTime - this.lastRefreshTime > sevenDaysInMs) {
-      console.log('7 Days passed: resetting story read states');
       (Object.keys(this.lastReadIndexes) as CauseType[]).forEach(c => {
         this.lastReadIndexes[c] = 0;
         this.seenCauses[c] = false;
       });
+      // Clear seen stories on weekly refresh
+      try {
+        if (typeof localStorage !== 'undefined' && localStorage !== null) {
+          localStorage.setItem('seenStoryIds', JSON.stringify([]));
+        }
+      } catch (e) {}
+      (global as any)['__storage_seenStoryIds'] = [];
       this.lastRefreshTime = currentTime;
     }
   }
 
-  // Helper to force reset for testing
   public forceReset() {
     (Object.keys(this.lastReadIndexes) as CauseType[]).forEach(c => {
       this.lastReadIndexes[c] = 0;
       this.seenCauses[c] = false;
       this.bookmarkedCauses[c] = false;
     });
+    try {
+      if (typeof localStorage !== 'undefined' && localStorage !== null) {
+        localStorage.setItem('seenStoryIds', JSON.stringify([]));
+      }
+    } catch (e) {}
+    (global as any)['__storage_seenStoryIds'] = [];
     this.lastRefreshTime = new Date().getTime();
   }
 }

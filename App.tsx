@@ -17,9 +17,12 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 // Import Screen Sections
 import { Home } from './screens/Home';
 import { Feed } from './screens/Feed';
-import { Community } from './screens/Community';
+import { Community } from './community/Community';
+import { SandboxCommunityView } from './community/SandboxCommunityView';
 import { Blog } from './screens/Blog';
 import { Profile } from './screens/Profile';
+import { StoryTestScreen } from './screens/StoryTestScreen';
+import { AuthFlow } from './screens/AuthFlow';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -41,9 +44,24 @@ export default function App() {
 
 function MainLayout() {
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [presence, setPresence] = useState<PresenceState>('Available');
   const [activeTab, setActiveTab] = useState(0);
+  const [showLiveTest, setShowLiveTest] = useState(false);
   const [pagerScrollEnabled, setPagerScrollEnabled] = useState(true);
+  const [useSandboxCommunity, setUseSandboxCommunity] = useState(false);
+
+  const [tabBarVisible, setTabBarVisible] = useState(true);
+  const tabBarTranslateY = useRef(new Animated.Value(0)).current;
+
+  const handleToggleTabBar = (visible: boolean) => {
+    setTabBarVisible(visible);
+    Animated.timing(tabBarTranslateY, {
+      toValue: visible ? 0 : 120,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  };
 
   const scrollViewRef = useRef<ScrollView>(null);
   const themeColors = isDarkMode ? Colors.dark : Colors.light;
@@ -88,7 +106,7 @@ function MainLayout() {
     setActiveTab(index);
     scrollViewRef.current?.scrollTo({
       x: index * screenWidth,
-      animated: true,
+      animated: false,
     });
     triggerFadeIn(index);
   };
@@ -101,6 +119,29 @@ function MainLayout() {
       triggerFadeIn(index);
     }
   };
+
+  if (!isAuthenticated) {
+    return (
+      <View
+        style={[
+          styles.safeArea,
+          {
+            backgroundColor: themeColors.neutralBackground1,
+            paddingTop: insets.top,
+          },
+        ]}
+      >
+        <StatusBar style={isDarkMode ? 'light' : 'dark'} />
+        <AuthFlow
+          isDarkMode={isDarkMode}
+          onAuthComplete={(userData) => {
+            console.log('Authenticated user:', userData);
+            setIsAuthenticated(true);
+          }}
+        />
+      </View>
+    );
+  }
 
   return (
     <View
@@ -121,12 +162,17 @@ function MainLayout() {
         ref={scrollViewRef}
         horizontal
         pagingEnabled
-        scrollEnabled={pagerScrollEnabled}
+        scrollEnabled={false}
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={handleScrollEnd}
         bounces={false}
         overScrollMode="never"
-        style={styles.pager}
+        style={[
+          styles.pager,
+          {
+            marginBottom: tabBarVisible ? 56 + (insets.bottom > 0 ? insets.bottom : Spacing.s) : 0,
+          },
+        ]}
       >
         <Animated.View style={[styles.page, { width: screenWidth, opacity: fadeAnims[0] }]}>
           <Home
@@ -135,6 +181,7 @@ function MainLayout() {
             onSetPagerScrollEnabled={setPagerScrollEnabled}
             autoOpenCause={autoOpenCause}
             onClearAutoOpenCause={() => setAutoOpenCause(null)}
+            onToggleTabBar={handleToggleTabBar}
           />
         </Animated.View>
         
@@ -143,7 +190,11 @@ function MainLayout() {
         </Animated.View>
         
         <Animated.View style={[styles.page, { width: screenWidth, opacity: fadeAnims[2] }]}>
-          <Community isDarkMode={isDarkMode} />
+          {useSandboxCommunity ? (
+            <SandboxCommunityView isDarkMode={isDarkMode} />
+          ) : (
+            <Community isDarkMode={isDarkMode} onToggleTabBar={handleToggleTabBar} activeTab={activeTab} />
+          )}
         </Animated.View>
         
         <Animated.View style={[styles.page, { width: screenWidth, opacity: fadeAnims[3] }]}>
@@ -160,12 +211,16 @@ function MainLayout() {
               setAutoOpenCause(cause);
               handleTabPress(0);
             }}
+            onViewLiveTest={() => setShowLiveTest(true)}
+            onSignOut={() => setIsAuthenticated(false)}
+            useSandboxCommunity={useSandboxCommunity}
+            onToggleSandboxCommunity={setUseSandboxCommunity}
           />
         </Animated.View>
       </ScrollView>
 
       {/* Bottom Navigation Bar */}
-      <View
+      <Animated.View
         style={[
           styles.tabBar,
           {
@@ -173,6 +228,11 @@ function MainLayout() {
             borderTopColor: themeColors.neutralStroke2,
             paddingBottom: insets.bottom > 0 ? insets.bottom : Spacing.s,
             paddingTop: Spacing.xxs,
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            transform: [{ translateY: tabBarTranslateY }],
           },
         ]}
       >
@@ -182,7 +242,12 @@ function MainLayout() {
             <Pressable
               key={tab.name}
               onPress={() => handleTabPress(index)}
-              style={styles.tabItem}
+              style={({ pressed }) => [
+                styles.tabItem,
+                {
+                  opacity: pressed ? 0.7 : 1,
+                }
+              ]}
             >
               {/* Active Tab Accent Line */}
               <View
@@ -194,38 +259,30 @@ function MainLayout() {
                 ]}
               />
 
-              <View style={styles.tabContent}>
-                <View
-                  style={[
-                    styles.tabIconContainer,
-                    {
-                      backgroundColor: isSelected ? themeColors.brandBackgroundSubtle : 'transparent',
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name={isSelected ? tab.activeIcon : tab.inactiveIcon}
-                    size={20}
-                    color={isSelected ? themeColors.brandForeground1 : themeColors.neutralForeground3}
-                  />
-                </View>
-                <Text
-                  style={[
-                    styles.tabLabel,
-                    isSelected ? Typography.captionStrong : Typography.caption,
-                    {
-                      color: isSelected ? themeColors.brandForeground1 : themeColors.neutralForeground3,
-                      marginTop: 2,
-                    },
-                  ]}
-                >
-                  {tab.name}
-                </Text>
-              </View>
+              <Ionicons
+                name={isSelected ? tab.activeIcon : tab.inactiveIcon}
+                size={22}
+                color={isSelected ? themeColors.brandForeground1 : themeColors.neutralForeground3}
+              />
+              <Text
+                style={[
+                  styles.tabLabel,
+                  {
+                    color: isSelected ? themeColors.brandForeground1 : themeColors.neutralForeground3,
+                    fontWeight: isSelected ? '600' : '500',
+                    marginTop: 2,
+                  },
+                ]}
+              >
+                {tab.name}
+              </Text>
             </Pressable>
           );
         })}
-      </View>
+      </Animated.View>
+      {showLiveTest && (
+        <StoryTestScreen isDarkMode={isDarkMode} onBack={() => setShowLiveTest(false)} />
+      )}
     </View>
   );
 }
@@ -273,18 +330,18 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
+    height: 56,
   },
   tabItem: {
     flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
     position: 'relative',
-    paddingVertical: Spacing.xxs,
   },
   tabAccentLine: {
-    height: 3,
-    width: '50%',
-    borderBottomLeftRadius: 1.5,
-    borderBottomRightRadius: 1.5,
+    height: 2,
+    width: '60%',
+    borderRadius: 1,
     position: 'absolute',
     top: 0,
   },

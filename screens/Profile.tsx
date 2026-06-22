@@ -15,6 +15,10 @@ interface ProfileProps {
   presence: PresenceState;
   onChangePresence: (state: PresenceState) => void;
   onViewCauseStories?: (cause: CauseType) => void;
+  onViewLiveTest?: () => void;
+  onSignOut?: () => void;
+  useSandboxCommunity?: boolean;
+  onToggleSandboxCommunity?: (value: boolean) => void;
 }
 
 export const Profile: React.FC<ProfileProps> = ({
@@ -23,6 +27,10 @@ export const Profile: React.FC<ProfileProps> = ({
   presence,
   onChangePresence,
   onViewCauseStories,
+  onViewLiveTest,
+  onSignOut,
+  useSandboxCommunity = false,
+  onToggleSandboxCommunity,
 }) => {
   const themeColors = isDarkMode ? Colors.dark : Colors.light;
   const [allowMentions, setAllowMentions] = useState(Personalization.getAllowMentions());
@@ -260,6 +268,29 @@ export const Profile: React.FC<ProfileProps> = ({
         </View>
       </Card>
 
+      {/* Sandbox Toggle Switch */}
+      <Card variant="Filled" isDarkMode={isDarkMode} style={styles.settingItemCard}>
+        <View style={styles.settingRow}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: Spacing.s }}>
+            <Ionicons name="flask-outline" size={20} color={themeColors.neutralForeground2} />
+            <View style={{ marginLeft: Spacing.s, flex: 1 }}>
+              <Text style={[Typography.body, { color: themeColors.neutralForeground1, fontWeight: '500' }]}>
+                Use Sandbox Community View
+              </Text>
+              <Text style={[Typography.caption, { color: themeColors.neutralForeground3, marginTop: 2 }]}>
+                Toggle to test the duplicate sandbox of the Community tab
+              </Text>
+            </View>
+          </View>
+          <Switch
+            value={useSandboxCommunity}
+            onValueChange={onToggleSandboxCommunity}
+            trackColor={{ false: themeColors.neutralStroke1, true: themeColors.brandBackground }}
+            thumbColor={useSandboxCommunity ? '#ffffff' : '#f5f5f5'}
+          />
+        </View>
+      </Card>
+
       {/* Other Settings Options */}
       <Card variant="Filled" isDarkMode={isDarkMode} style={styles.settingItemCard}>
         <Pressable onPress={() => console.log('Acc pressed')} style={styles.settingRow}>
@@ -285,12 +316,25 @@ export const Profile: React.FC<ProfileProps> = ({
         </Pressable>
       </Card>
 
+      {/* Dynamic Live Update Tester Card */}
+      <Card variant="Filled" isDarkMode={isDarkMode} style={[styles.settingItemCard, { borderColor: themeColors.brandForeground1, borderWidth: 1 }]}>
+        <Pressable onPress={() => onViewLiveTest?.()} style={styles.settingRow}>
+          <View style={styles.settingLabelContainer}>
+            <Ionicons name="construct-outline" size={20} color={themeColors.brandForeground1} />
+            <Text style={[Typography.body, styles.settingText, { color: themeColors.brandForeground1, fontWeight: 'bold' }]}>
+              Launch Real-Time AI Story Tester
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={themeColors.brandForeground1} />
+        </Pressable>
+      </Card>
+
       {/* Sign Out */}
       <View style={{ marginTop: Spacing.xl }}>
         <Button
-          label="Sign Out of Portal"
+          label="Sign Out & Test Onboarding"
           appearance="Outline"
-          onPress={() => console.log('Signed out')}
+          onPress={onSignOut || (() => {})}
           isDarkMode={isDarkMode}
         />
       </View>

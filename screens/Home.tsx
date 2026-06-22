@@ -32,7 +32,7 @@ import { NotificationsScreen } from './NotificationsScreen';
 import { RelaxedVolunteerIllustration } from '../components/RelaxedVolunteerIllustration';
 import { Personalization, CauseType, Opportunity, Idea, NotificationItem, MOCK_FRIENDS, Friend } from '../services/personalization';
 import { StoryService, Story } from '../services/storyManager';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -110,14 +110,14 @@ const SupportButton: React.FC<SupportButtonProps> = ({
       Animated.spring(scaleAnim, {
         toValue: 1.3,
         useNativeDriver: true,
-        friction: 4,
-        tension: 40,
+        friction: 8,
+        tension: 15,
       }),
       Animated.spring(scaleAnim, {
         toValue: 1.0,
         useNativeDriver: true,
-        friction: 4,
-        tension: 40,
+        friction: 8,
+        tension: 15,
       }),
     ]).start();
 
@@ -284,6 +284,7 @@ interface HomeProps {
   onSetPagerScrollEnabled?: (enabled: boolean) => void;
   autoOpenCause?: string | null;
   onClearAutoOpenCause?: () => void;
+  onToggleTabBar?: (visible: boolean) => void;
 }
 
 export const Home: React.FC<HomeProps> = ({
@@ -292,6 +293,7 @@ export const Home: React.FC<HomeProps> = ({
   onSetPagerScrollEnabled,
   autoOpenCause,
   onClearAutoOpenCause,
+  onToggleTabBar,
 }) => {
   const themeColors = isDarkMode ? Colors.dark : Colors.light;
   const isCompactScreen = screenWidth < 380;
@@ -425,35 +427,86 @@ export const Home: React.FC<HomeProps> = ({
     outputRange: [1, 1.03],
   });
 
-  // Swipe-down to close PanResponder
+  // Ref to hold current story state to avoid stale closures in PanResponder
+  const storyStateRef = useRef({ activeStoryCause, activeStories, causes });
+  storyStateRef.current = { activeStoryCause, activeStories, causes };
+
+  // Transition directly to the next/previous cause category with a slide animation
+  function handleSwipeCause(isNext: boolean) {
+    const { activeStoryCause: currentCause, activeStories: currentStories, causes: currentCauses } = storyStateRef.current;
+    if (!currentCause || currentStories.length === 0) return;
+
+    const currentIdx = currentCauses.indexOf(currentCause);
+    const targetIdx = isNext ? currentIdx + 1 : currentIdx - 1;
+
+    if (targetIdx >= 0 && targetIdx < currentCauses.length) {
+      const targetCause = currentCauses[targetIdx];
+      const targetStories = StoryService.getSortedStoriesForCause(targetCause);
+
+      stopStoryTimer();
+
+      animateCauseTransition(() => {
+        setActiveStoryCause(targetCause);
+        setActiveStories(targetStories);
+        setStoryIndex(0);
+        setCauseBookmarkState(prev => ({
+          ...prev,
+          [targetCause]: StoryService.isCauseBookmarked(targetCause),
+        }));
+      }, isNext);
+    }
+  }
+
+  // Swipe-down and swipe-left/right PanResponder
   const storyPanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (evt, gestureState) => {
-        return gestureState.dy > 10 && Math.abs(gestureState.dx) < gestureState.dy;
+        const isSwipeDown = gestureState.dy > 10 && Math.abs(gestureState.dx) < gestureState.dy;
+        const isHorizontalSwipe = Math.abs(gestureState.dx) > 10 && Math.abs(gestureState.dy) < Math.abs(gestureState.dx);
+        return isSwipeDown || isHorizontalSwipe;
       },
       onPanResponderMove: (evt, gestureState) => {
-        if (gestureState.dy > 0) {
-          storyPanY.setValue(gestureState.dy);
+        if (Math.abs(gestureState.dy) > Math.abs(gestureState.dx)) {
+          if (gestureState.dy > 0) {
+            storyPanY.setValue(gestureState.dy);
+          }
         }
       },
       onPanResponderRelease: (evt, gestureState) => {
-        if (gestureState.dy > 120 || gestureState.vy > 0.5) {
+        const { activeStoryCause: currentCause } = storyStateRef.current;
+        // Vertical swipe down to close
+        if (Math.abs(gestureState.dy) > Math.abs(gestureState.dx) && (gestureState.dy > 80 || gestureState.vy > 0.4)) {
+          onToggleTabBar?.(true);
+          if (currentCause) {
+            StoryService.markCauseSeen(currentCause, true);
+          }
           Animated.timing(storyPanY, {
             toValue: screenHeight,
-            duration: 250,
+            duration: 500,
             useNativeDriver: true,
           }).start(() => {
             setActiveStoryCause(null);
             setActiveStories([]);
             storyPanY.setValue(0);
             storyViewerAnim.setValue(0);
+            loadPersonalizedData();
           });
-        } else {
+        }
+        // Horizontal swipe right (finger moving right-to-left) -> next cause
+        else if (gestureState.dx < -50 || gestureState.vx < -0.3) {
+          handleSwipeCause(true);
+        }
+        // Horizontal swipe left (finger moving left-to-right) -> previous cause
+        else if (gestureState.dx > 50 || gestureState.vx > 0.3) {
+          handleSwipeCause(false);
+        }
+        // Spring back if drag wasn't enough to trigger an action
+        else {
           Animated.spring(storyPanY, {
             toValue: 0,
-            tension: 45,
-            friction: 7,
+            tension: 10,
+            friction: 12,
             useNativeDriver: true,
           }).start();
         }
@@ -461,6 +514,8 @@ export const Home: React.FC<HomeProps> = ({
       onPanResponderTerminate: () => {
         Animated.spring(storyPanY, {
           toValue: 0,
+          tension: 10,
+          friction: 12,
           useNativeDriver: true,
         }).start();
       },
@@ -471,6 +526,270 @@ export const Home: React.FC<HomeProps> = ({
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(
     Personalization.getNotifications().filter(n => n.unread).length
   );
+
+  // Curated sequence of causes
+  const causesList: CauseType[] = [
+    'Animal Welfare',
+    'Child Welfare',
+    'Disaster Relief',
+    'Education',
+    'Elderly Care',
+    'Environment & Sustainability',
+    'Healthcare',
+    'Poverty Alleviation & Livelihoods',
+    'Rural Development',
+    'Support for Persons with Disabilities',
+    'Water, Sanitation, and Hygiene (WASH)',
+    'Women Empowerment',
+  ];
+
+  // Category and Pinned Category State
+  const [pinnedCause, setPinnedCause] = useState<CauseType | null>(() => {
+    try {
+      if (typeof localStorage !== 'undefined' && localStorage !== null) {
+        const saved = localStorage.getItem('pinnedCause');
+        return saved ? (saved as CauseType) : null;
+      }
+    } catch (e) {}
+    return (global as any)['__storage_pinnedCause'] || null;
+  });
+  const [activeCategory, setActiveCategory] = useState<string>('All');
+
+  // Stories Paused State & Dimmer overlay animations
+  const [isStoryPaused, setIsStoryPaused] = useState(false);
+  const leftFlashOpacity = useRef(new Animated.Value(0)).current;
+  const rightFlashOpacity = useRef(new Animated.Value(0)).current;
+  const bookmarkScaleAnim = useRef(new Animated.Value(1)).current;
+  const [isCaptionSheetOpen, setIsCaptionSheetOpen] = useState(false);
+
+  // Heart like animation scale
+  const heartScaleAnim = useRef(new Animated.Value(1)).current;
+
+  // Story transition animations
+  const causeTransitionAnim = useRef(new Animated.Value(0)).current;
+  const storyFadeAnim = useRef(new Animated.Value(1)).current;
+
+  // CTA Press feedback scale
+  const ctaPressScale = useRef(new Animated.Value(1)).current;
+
+  // Swipe-down dismiss coachmark state
+  const [showSwipeCoachMark, setShowSwipeCoachMark] = useState(false);
+
+  // Coachmark timer ref
+  const storyCoachMarkTimeoutRef = useRef<any>(null);
+
+  const dismissCoachMark = () => {
+    setShowStoryCoachMark(false);
+    if (storyCoachMarkTimeoutRef.current) {
+      clearTimeout(storyCoachMarkTimeoutRef.current);
+    }
+  };
+
+  // Pin category handler
+  const handlePinCause = (cause: CauseType) => {
+    if (pinnedCause === cause) {
+      setPinnedCause(null);
+      try {
+        if (typeof localStorage !== 'undefined' && localStorage !== null) {
+          localStorage.setItem('pinnedCause', '');
+        }
+      } catch (e) {}
+      (global as any)['__storage_pinnedCause'] = null;
+      try {
+        Vibration.vibrate(15);
+      } catch (err) {}
+      Alert.alert("Unpinned", `"${cause}" has been unpinned.`);
+    } else {
+      setPinnedCause(cause);
+      try {
+        if (typeof localStorage !== 'undefined' && localStorage !== null) {
+          localStorage.setItem('pinnedCause', cause);
+        }
+      } catch (e) {}
+      (global as any)['__storage_pinnedCause'] = cause;
+      try {
+        Vibration.vibrate(30);
+      } catch (err) {}
+      Alert.alert("Pinned", `"${cause}" has been pinned to the front.`);
+    }
+  };
+
+  // Category select handler
+  const handleCategoryPress = (category: string) => {
+    setActiveCategory(category);
+    if (category !== 'All') {
+      openStoriesForCause(category as CauseType);
+    }
+  };
+
+  // Segment tap handler to jump between stories
+  const handleSegmentTap = (idx: number) => {
+    if (idx !== storyIndex) {
+      setStoryIndex(idx);
+      StoryService.saveProgress(activeStoryCause as CauseType, idx);
+      // Restart timer for the new segment
+      startStoryTimer();
+    }
+  };
+
+  // Caption sheet open/close helpers
+  const openCaptionSheet = () => {
+    setIsCaptionSheetOpen(true);
+    handleStoryPressIn();
+  };
+
+  const closeCaptionSheet = () => {
+    setIsCaptionSheetOpen(false);
+    handleStoryPressOut();
+  };
+
+  // Helper to map causes to custom cover props (icon, color background)
+  const getCauseCoverProps = (cause: CauseType) => {
+    switch (cause) {
+      case 'Education':
+        return {
+          icon: 'school-outline',
+          bgColor: themeColors.causeEducation || '#9c27b0',
+          iconFamily: 'Ionicons'
+        };
+      case 'Child Welfare':
+        return {
+          icon: 'baby',
+          bgColor: themeColors.causeChild || '#ff9800',
+          iconFamily: 'MaterialCommunityIcons'
+        };
+      case 'Healthcare':
+        return {
+          icon: 'stethoscope',
+          bgColor: themeColors.causeHealth || '#009688',
+          iconFamily: 'MaterialCommunityIcons'
+        };
+      case 'Women Empowerment':
+        return {
+          icon: 'sparkles-outline',
+          bgColor: themeColors.causeWomen || '#e91e63',
+          iconFamily: 'Ionicons'
+        };
+      case 'Elderly Care':
+        return {
+          icon: 'hand-heart',
+          bgColor: themeColors.causeElderly || '#3f51b5',
+          iconFamily: 'MaterialCommunityIcons'
+        };
+      case 'Poverty Alleviation & Livelihoods':
+        return {
+          icon: 'sprout',
+          bgColor: themeColors.causePoverty || '#4caf50',
+          iconFamily: 'MaterialCommunityIcons'
+        };
+      case 'Animal Welfare':
+        return {
+          icon: 'paw',
+          bgColor: themeColors.causeChild || '#ff9800',
+          iconFamily: 'Ionicons'
+        };
+      case 'Disaster Relief':
+        return {
+          icon: 'help-buoy-outline',
+          bgColor: themeColors.dangerForeground1 || '#c41818',
+          iconFamily: 'Ionicons'
+        };
+      case 'Environment & Sustainability':
+        return {
+          icon: 'leaf-outline',
+          bgColor: themeColors.causePoverty || '#4caf50',
+          iconFamily: 'Ionicons'
+        };
+      case 'Rural Development':
+        return {
+          icon: 'home-outline',
+          bgColor: '#8d6e63',
+          iconFamily: 'Ionicons'
+        };
+      case 'Support for Persons with Disabilities':
+        return {
+          icon: 'accessibility-outline',
+          bgColor: themeColors.brandForeground1 || '#0f6cbd',
+          iconFamily: 'Ionicons'
+        };
+      case 'Water, Sanitation, and Hygiene (WASH)':
+        return {
+          icon: 'water-outline',
+          bgColor: '#2196f3',
+          iconFamily: 'Ionicons'
+        };
+      default:
+        return {
+          icon: 'heart-outline',
+          bgColor: themeColors.brandForeground1 || '#0f6cbd',
+          iconFamily: 'Ionicons'
+        };
+    }
+  };
+
+  // Quick fade in-out animation helper for same-cause transitions
+  const animateStoryTransition = (callback: () => void) => {
+    Animated.timing(storyFadeAnim, {
+      toValue: 0,
+      duration: 400,
+      useNativeDriver: true,
+    }).start(() => {
+      callback();
+      Animated.timing(storyFadeAnim, {
+        toValue: 1,
+        duration: 450,
+        useNativeDriver: true,
+      }).start();
+    });
+  };
+
+  // Horizontal slide animation helper for cause-to-cause transitions
+  const animateCauseTransition = (callback: () => void, isNext: boolean) => {
+    const outValue = isNext ? -screenWidth : screenWidth;
+    const inStartValue = isNext ? screenWidth : -screenWidth;
+    
+    Animated.timing(causeTransitionAnim, {
+      toValue: outValue,
+      duration: 400,
+      easing: Easing.out(Easing.ease),
+      useNativeDriver: true,
+    }).start(() => {
+      callback();
+      causeTransitionAnim.setValue(inStartValue);
+      Animated.timing(causeTransitionAnim, {
+        toValue: 0,
+        duration: 450,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }).start();
+    });
+  };
+
+  // CTA Press scaling feedback functions
+  const handleStoryCtaPressIn = () => {
+    Animated.timing(ctaPressScale, {
+      toValue: 0.98,
+      duration: 120,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handleStoryCtaPressOut = () => {
+    Animated.timing(ctaPressScale, {
+      toValue: 1.0,
+      duration: 120,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  // Category opportunity count helper
+  const getOpportunityCount = (category: string) => {
+    const allOpps = Personalization.getRawOpportunities();
+    if (category === 'All') {
+      return allOpps.length;
+    }
+    return allOpps.filter(opp => opp.cause === category).length;
+  };
 
   // Micro-volunteering Card Redesign states and animations
   const [selectedTimeFilter, setSelectedTimeFilter] = useState<number>(15);
@@ -512,14 +831,16 @@ export const Home: React.FC<HomeProps> = ({
   const handleCtaPressIn = () => {
     Animated.spring(ctaButtonScale, {
       toValue: 0.96,
+      tension: 20,
+      friction: 8,
       useNativeDriver: true,
     }).start();
   };
   const handleCtaPressOut = () => {
     Animated.spring(ctaButtonScale, {
       toValue: 1.0,
-      tension: 40,
-      friction: 5,
+      tension: 20,
+      friction: 8,
       useNativeDriver: true,
     }).start();
   };
@@ -548,7 +869,7 @@ export const Home: React.FC<HomeProps> = ({
     setIsMicroVolunteeringMounted(true);
     Animated.timing(microVolunteeringAnim, {
       toValue: 1,
-      duration: 300,
+      duration: 450,
       easing: Easing.out(Easing.ease),
       useNativeDriver: true,
     }).start(() => {
@@ -561,7 +882,7 @@ export const Home: React.FC<HomeProps> = ({
     isTransitioning.current = true;
     Animated.timing(microVolunteeringAnim, {
       toValue: 0,
-      duration: 300,
+      duration: 450,
       easing: Easing.out(Easing.ease),
       useNativeDriver: true,
     }).start(() => {
@@ -576,7 +897,7 @@ export const Home: React.FC<HomeProps> = ({
     setIsNotificationsMounted(true);
     Animated.timing(notificationsAnim, {
       toValue: 1,
-      duration: 300,
+      duration: 450,
       easing: Easing.out(Easing.ease),
       useNativeDriver: true,
     }).start(() => {
@@ -589,7 +910,7 @@ export const Home: React.FC<HomeProps> = ({
     isTransitioning.current = true;
     Animated.timing(notificationsAnim, {
       toValue: 0,
-      duration: 300,
+      duration: 450,
       easing: Easing.out(Easing.ease),
       useNativeDriver: true,
     }).start(() => {
@@ -619,7 +940,7 @@ export const Home: React.FC<HomeProps> = ({
           isTransitioning.current = true;
           Animated.timing(microVolunteeringAnim, {
             toValue: 0,
-            duration: 250,
+            duration: 400,
             easing: Easing.out(Easing.ease),
             useNativeDriver: true,
           }).start(() => {
@@ -630,7 +951,7 @@ export const Home: React.FC<HomeProps> = ({
           isTransitioning.current = true;
           Animated.timing(microVolunteeringAnim, {
             toValue: 1,
-            duration: 200,
+            duration: 350,
             easing: Easing.out(Easing.ease),
             useNativeDriver: true,
           }).start(() => {
@@ -642,7 +963,7 @@ export const Home: React.FC<HomeProps> = ({
         isTransitioning.current = true;
         Animated.timing(microVolunteeringAnim, {
           toValue: 1,
-          duration: 200,
+          duration: 350,
           easing: Easing.out(Easing.ease),
           useNativeDriver: true,
         }).start(() => {
@@ -673,7 +994,7 @@ export const Home: React.FC<HomeProps> = ({
           isTransitioning.current = true;
           Animated.timing(notificationsAnim, {
             toValue: 0,
-            duration: 250,
+            duration: 400,
             easing: Easing.out(Easing.ease),
             useNativeDriver: true,
           }).start(() => {
@@ -684,7 +1005,7 @@ export const Home: React.FC<HomeProps> = ({
           isTransitioning.current = true;
           Animated.timing(notificationsAnim, {
             toValue: 1,
-            duration: 200,
+            duration: 350,
             easing: Easing.out(Easing.ease),
             useNativeDriver: true,
           }).start(() => {
@@ -696,7 +1017,7 @@ export const Home: React.FC<HomeProps> = ({
         isTransitioning.current = true;
         Animated.timing(notificationsAnim, {
           toValue: 1,
-          duration: 200,
+          duration: 350,
           easing: Easing.out(Easing.ease),
           useNativeDriver: true,
         }).start(() => {
@@ -747,7 +1068,7 @@ export const Home: React.FC<HomeProps> = ({
     toastAnim.setValue(0);
     Animated.timing(toastAnim, {
       toValue: 1,
-      duration: 300,
+      duration: 450,
       useNativeDriver: true,
     }).start();
 
@@ -762,7 +1083,7 @@ export const Home: React.FC<HomeProps> = ({
   const hideToast = () => {
     Animated.timing(toastAnim, {
       toValue: 0,
-      duration: 250,
+      duration: 400,
       useNativeDriver: true,
     }).start(() => {
       setToast(null);
@@ -805,7 +1126,7 @@ export const Home: React.FC<HomeProps> = ({
     pickerAnim.setValue(0);
     Animated.timing(pickerAnim, {
       toValue: 1,
-      duration: 350,
+      duration: 500,
       useNativeDriver: true,
     }).start();
 
@@ -818,7 +1139,7 @@ export const Home: React.FC<HomeProps> = ({
   const closePicker = () => {
     Animated.timing(pickerAnim, {
       toValue: 0,
-      duration: 300,
+      duration: 450,
       useNativeDriver: true,
     }).start(() => {
       setPickerIdeaId(null);
@@ -838,10 +1159,17 @@ export const Home: React.FC<HomeProps> = ({
     }, 400);
   };
 
-  // Load and Rank Data
   const loadPersonalizedData = () => {
-    // 1. Sort causes based on affinity
-    setCauses(Personalization.getSortedCauses());
+    // 1. Sort causes: unseen first, seen/read causes towards the end (right side), keeping alphabetical order within groups
+    const sorted = [...Personalization.getSortedCauses()].sort((a, b) => a.localeCompare(b));
+    const unseenCauses = sorted.filter(c => !StoryService.isCauseSeen(c));
+    const seenCauses = sorted.filter(c => StoryService.isCauseSeen(c));
+    let ordered = [...unseenCauses, ...seenCauses];
+
+    if (pinnedCause && ordered.includes(pinnedCause)) {
+      ordered = [pinnedCause, ...ordered.filter(c => c !== pinnedCause)];
+    }
+    setCauses(ordered);
 
     // 2. Fetch and Rank Opportunities
     const allOpps = Personalization.getRawOpportunities();
@@ -905,14 +1233,17 @@ export const Home: React.FC<HomeProps> = ({
 
   useEffect(() => {
     loadPersonalizedData();
-  }, []);
+  }, [pinnedCause]);
 
   // --- Story Functions ---
   const openStoriesForCause = (cause: CauseType) => {
+    // Hide bottom tab bar
+    onToggleTabBar?.(false);
+
     // Record visual click rates (Positive signal)
     Personalization.recordSignal(cause, 'OpenProfile');
 
-    const stories = StoryService.getStories(cause);
+    const stories = StoryService.getSortedStoriesForCause(cause);
     const lastIndex = StoryService.getLastReadIndex(cause);
 
     setActiveStoryCause(cause);
@@ -925,13 +1256,61 @@ export const Home: React.FC<HomeProps> = ({
       [cause]: StoryService.isCauseBookmarked(cause)
     }));
 
-    // Trigger coach mark if it's the first time
-    if (!Personalization.getHasSeenStoryCoachMark()) {
+    // Trigger coach mark if it's the first time, persisted in localStorage
+    let hasSeenCoachMark = false;
+    try {
+      if (typeof localStorage !== 'undefined' && localStorage !== null) {
+        hasSeenCoachMark = localStorage.getItem('hasSeenStoryCoachMark') === 'true';
+      }
+    } catch (e) {}
+    if ((global as any)['__storage_hasSeenStoryCoachMark'] === 'true') {
+      hasSeenCoachMark = true;
+    }
+
+    if (!hasSeenCoachMark) {
       setShowStoryCoachMark(true);
-      Personalization.setHasSeenStoryCoachMark(true);
-      setTimeout(() => {
+      try {
+        if (typeof localStorage !== 'undefined' && localStorage !== null) {
+          localStorage.setItem('hasSeenStoryCoachMark', 'true');
+        }
+      } catch (e) {}
+      (global as any)['__storage_hasSeenStoryCoachMark'] = 'true';
+
+      if (storyCoachMarkTimeoutRef.current) {
+        clearTimeout(storyCoachMarkTimeoutRef.current);
+      }
+      storyCoachMarkTimeoutRef.current = setTimeout(() => {
         setShowStoryCoachMark(false);
       }, 3000);
+    } else {
+      setShowStoryCoachMark(false);
+    }
+
+    // Swipe close coach mark check
+    let hasSeenSwipeCoach = false;
+    try {
+      if (typeof localStorage !== 'undefined' && localStorage !== null) {
+        hasSeenSwipeCoach = localStorage.getItem('hasSeenSwipeCloseCoachMark') === 'true';
+      }
+    } catch (e) {}
+    if ((global as any)['__storage_hasSeenSwipeCloseCoachMark'] === 'true') {
+      hasSeenSwipeCoach = true;
+    }
+
+    if (!hasSeenSwipeCoach) {
+      setShowSwipeCoachMark(true);
+      try {
+        if (typeof localStorage !== 'undefined' && localStorage !== null) {
+          localStorage.setItem('hasSeenSwipeCloseCoachMark', 'true');
+        }
+      } catch (e) {}
+      (global as any)['__storage_hasSeenSwipeCloseCoachMark'] = 'true';
+
+      setTimeout(() => {
+        setShowSwipeCoachMark(false);
+      }, 2000);
+    } else {
+      setShowSwipeCoachMark(false);
     }
 
     // Zoom/Spring scale open transition
@@ -939,8 +1318,8 @@ export const Home: React.FC<HomeProps> = ({
     storyViewerAnim.setValue(0);
     Animated.spring(storyViewerAnim, {
       toValue: 1,
-      tension: 40,
-      friction: 7,
+      tension: 10,
+      friction: 12,
       useNativeDriver: true,
     }).start();
   };
@@ -985,12 +1364,29 @@ export const Home: React.FC<HomeProps> = ({
   };
 
   const handleStoryNext = () => {
-    if (!activeStoryCause) return;
+    if (!activeStoryCause || activeStories.length === 0) return;
+
+    // Track finish progress: Users finished the current story if they are moving next
+    const currentStory = activeStories[storyIndex];
+    if (currentStory) {
+      // Mark as read/seen in local storage seenStoryIds
+      StoryService.markStorySeen(currentStory.id);
+      
+      // Increment tag weights for completing this story (>80% progress)
+      if (currentStory.tags) {
+        currentStory.tags.forEach(tag => {
+          StoryService.incrementTagWeight(tag, 1); // completion boosts by 1 point
+        });
+      }
+    }
 
     if (storyIndex < activeStories.length - 1) {
-      const nextIdx = storyIndex + 1;
-      setStoryIndex(nextIdx);
-      StoryService.saveProgress(activeStoryCause, nextIdx);
+      // Same cause transition: Do a quick fade-in fade-out animation
+      animateStoryTransition(() => {
+        const nextIdx = storyIndex + 1;
+        setStoryIndex(nextIdx);
+        StoryService.saveProgress(activeStoryCause, nextIdx);
+      });
     } else {
       // Completed all stories in cause (Positive signal)
       Personalization.recordSignal(activeStoryCause, 'CompleteStory');
@@ -1001,24 +1397,18 @@ export const Home: React.FC<HomeProps> = ({
       const nextIdx = currentIdx + 1;
       if (nextIdx < causes.length) {
         const nextCause = causes[nextIdx];
-        const nextStories = StoryService.getStories(nextCause);
+        const nextStories = StoryService.getSortedStoriesForCause(nextCause);
         
-        // Brief scale reset transition for next cause
-        storyViewerAnim.setValue(0.9);
-        Animated.spring(storyViewerAnim, {
-          toValue: 1,
-          tension: 50,
-          friction: 7,
-          useNativeDriver: true,
-          }).start();
-
-        setActiveStoryCause(nextCause);
-        setActiveStories(nextStories);
-        setStoryIndex(0);
-        setCauseBookmarkState(prev => ({
-          ...prev,
-          [nextCause]: StoryService.isCauseBookmarked(nextCause)
-        }));
+        // Cause-to-cause transition: Horizontal slide (180 ms, ease-out)
+        animateCauseTransition(() => {
+          setActiveStoryCause(nextCause);
+          setActiveStories(nextStories);
+          setStoryIndex(0);
+          setCauseBookmarkState(prev => ({
+            ...prev,
+            [nextCause]: StoryService.isCauseBookmarked(nextCause)
+          }));
+        }, true); // next = slide left
       } else {
         // No more causes, close
         closeStories();
@@ -1027,36 +1417,33 @@ export const Home: React.FC<HomeProps> = ({
   };
 
   const handleStoryPrev = () => {
-    if (!activeStoryCause) return;
+    if (!activeStoryCause || activeStories.length === 0) return;
 
     if (storyIndex > 0) {
-      const prevIdx = storyIndex - 1;
-      setStoryIndex(prevIdx);
-      StoryService.saveProgress(activeStoryCause, prevIdx);
+      // Same cause transition: Do a quick fade-in fade-out animation
+      animateStoryTransition(() => {
+        const prevIdx = storyIndex - 1;
+        setStoryIndex(prevIdx);
+        StoryService.saveProgress(activeStoryCause, prevIdx);
+      });
     } else {
       // Go back to the previous cause's last story
       const currentIdx = causes.indexOf(activeStoryCause);
       const prevIdx = currentIdx - 1;
       if (prevIdx >= 0) {
         const prevCause = causes[prevIdx];
-        const prevStories = StoryService.getStories(prevCause);
+        const prevStories = StoryService.getSortedStoriesForCause(prevCause);
 
-        // Brief scale reset transition
-        storyViewerAnim.setValue(0.9);
-        Animated.spring(storyViewerAnim, {
-          toValue: 1,
-          tension: 50,
-          friction: 7,
-          useNativeDriver: true,
-        }).start();
-
-        setActiveStoryCause(prevCause);
-        setActiveStories(prevStories);
-        setStoryIndex(prevStories.length - 1);
-        setCauseBookmarkState(prev => ({
-          ...prev,
-          [prevCause]: StoryService.isCauseBookmarked(prevCause)
-        }));
+        // Cause-to-cause transition: Horizontal slide (180 ms, ease-out)
+        animateCauseTransition(() => {
+          setActiveStoryCause(prevCause);
+          setActiveStories(prevStories);
+          setStoryIndex(prevStories.length - 1);
+          setCauseBookmarkState(prev => ({
+            ...prev,
+            [prevCause]: StoryService.isCauseBookmarked(prevCause)
+          }));
+        }, false); // prev = slide right
       }
     }
   };
@@ -1064,12 +1451,15 @@ export const Home: React.FC<HomeProps> = ({
   const closeStories = () => {
     if (!activeStoryCause) return;
     
+    // Restore bottom tab bar
+    onToggleTabBar?.(true);
+
     // Mark cause as seen when closed
     StoryService.markCauseSeen(activeStoryCause, true);
 
     Animated.timing(storyViewerAnim, {
       toValue: 0,
-      duration: 250,
+      duration: 500,
       useNativeDriver: true,
     }).start(() => {
       setActiveStoryCause(null);
@@ -1080,6 +1470,7 @@ export const Home: React.FC<HomeProps> = ({
 
   const handleStoryPressIn = () => {
     isPausedRef.current = true;
+    setIsStoryPaused(true);
     storyProgress.stopAnimation((value) => {
       pausedValueRef.current = value;
     });
@@ -1087,6 +1478,7 @@ export const Home: React.FC<HomeProps> = ({
 
   const handleStoryPressOut = () => {
     isPausedRef.current = false;
+    setIsStoryPaused(false);
     const remainingTime = 7000 * (1 - pausedValueRef.current);
 
     const reduceMotion = Personalization.getReduceMotion();
@@ -1103,8 +1495,49 @@ export const Home: React.FC<HomeProps> = ({
     });
   };
 
+  const triggerLeftFlash = () => {
+    leftFlashOpacity.setValue(1);
+    Animated.timing(leftFlashOpacity, {
+      toValue: 0,
+      duration: 150,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const triggerRightFlash = () => {
+    rightFlashOpacity.setValue(1);
+    Animated.timing(rightFlashOpacity, {
+      toValue: 0,
+      duration: 150,
+      useNativeDriver: true,
+    }).start();
+  };
+
   const handleToggleBookmarkStory = () => {
     if (!activeStoryCause) return;
+
+    // Trigger spring scale animation: 1 -> 1.3 -> 1
+    bookmarkScaleAnim.setValue(1);
+    Animated.sequence([
+      Animated.spring(bookmarkScaleAnim, {
+        toValue: 1.3,
+        useNativeDriver: true,
+        friction: 8,
+        tension: 15,
+      }),
+      Animated.spring(bookmarkScaleAnim, {
+        toValue: 1.0,
+        useNativeDriver: true,
+        friction: 8,
+        tension: 15,
+      }),
+    ]).start();
+
+    // Subtle haptic tick
+    try {
+      Vibration.vibrate(15);
+    } catch (err) {}
+
     const isBookmarkedNow = StoryService.toggleCauseBookmarked(activeStoryCause);
     setCauseBookmarkState(prev => ({ ...prev, [activeStoryCause]: isBookmarkedNow }));
     
@@ -1123,6 +1556,28 @@ export const Home: React.FC<HomeProps> = ({
     const newSupported = !current.supported;
     const newCount = current.count + (newSupported ? 1 : -1);
     
+    // Heart burst scale animation: 1 -> 1.3 -> 1
+    heartScaleAnim.setValue(1);
+    Animated.sequence([
+      Animated.spring(heartScaleAnim, {
+        toValue: 1.3,
+        useNativeDriver: true,
+        friction: 8,
+        tension: 15,
+      }),
+      Animated.spring(heartScaleAnim, {
+        toValue: 1.0,
+        useNativeDriver: true,
+        friction: 8,
+        tension: 15,
+      }),
+    ]).start();
+
+    // Subtle vibration
+    try {
+      Vibration.vibrate(15);
+    } catch (err) {}
+
     setCauseSupportState(prev => ({
       ...prev,
       [activeStoryCause]: { supported: newSupported, count: newCount }
@@ -1371,111 +1826,163 @@ export const Home: React.FC<HomeProps> = ({
           onTouchStart={() => onSetPagerScrollEnabled?.(false)}
           onTouchEnd={() => onSetPagerScrollEnabled?.(true)}
           onTouchCancel={() => onSetPagerScrollEnabled?.(true)}
+          style={{ position: 'relative' }}
         >
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.causesContainer}
-            snapToInterval={92}
+            contentContainerStyle={[styles.causesContainer, { paddingRight: 28 }]}
+            snapToInterval={88}
             decelerationRate="fast"
             nestedScrollEnabled={true}
           >
+
+
+            {/* Curated Categories List */}
             {causes.map((cause) => {
               const isSeen = StoryService.isCauseSeen(cause);
+              const isActive = activeCategory === cause;
+              const isPinned = pinnedCause === cause;
+              const coverProps = getCauseCoverProps(cause);
+              const IconComponent = coverProps.iconFamily === 'MaterialCommunityIcons' ? MaterialCommunityIcons : Ionicons;
+
               return (
                 <Pressable
                   key={cause}
-                  onPress={() => openStoriesForCause(cause)}
-                  style={{ alignItems: 'center', width: 80, marginRight: 12 }}
+                  onPress={() => handleCategoryPress(cause)}
+                  onLongPress={() => handlePinCause(cause)}
+                  style={{ alignItems: 'center', width: 72, paddingVertical: 8, marginVertical: 4, marginRight: 16 }}
+                  delayLongPress={600}
                 >
-                  {isSeen ? (
-                    /* Seen State Ring */
-                    <View
-                      style={{
-                        width: 72,
-                        height: 72,
-                        borderRadius: 36,
-                        borderWidth: 2,
-                        borderColor: themeColors.neutralStroke2,
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                      }}
-                    >
-                      <Image
-                        source={{ uri: CAUSE_IMAGES[cause] }}
-                        style={{ width: 62, height: 62, borderRadius: 31, opacity: 0.65 }}
-                      />
-                    </View>
-                  ) : (
-                    /* Unseen State Ring with Rotating Gradient and play badge */
-                    <View style={{ width: 72, height: 72, justifyContent: 'center', alignItems: 'center' }}>
-                      <Animated.View
+                  <View style={{ width: 72, height: 72, justifyContent: 'center', alignItems: 'center', position: 'relative' }}>
+                    {/* Ring selection & story seen check */}
+                    {isActive ? (
+                      /* Active category ring in primary */
+                      <View
                         style={{
-                          position: 'absolute',
                           width: 72,
                           height: 72,
                           borderRadius: 36,
-                          overflow: 'hidden',
-                          transform: [{ rotate: rotateStr }],
-                        }}
-                      >
-                        <LinearGradient
-                          colors={['#0f6cbd', '#8660a9', '#d86109', '#0f6cbd']}
-                          style={{ flex: 1 }}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 1 }}
-                        />
-                      </Animated.View>
-                      <View
-                        style={{
-                          width: 66,
-                          height: 66,
-                          borderRadius: 33,
-                          backgroundColor: themeColors.neutralBackground1,
+                          borderWidth: 2,
+                          borderColor: themeColors.brandForeground1,
                           justifyContent: 'center',
                           alignItems: 'center',
-                          zIndex: 1,
+                          backgroundColor: themeColors.neutralBackground1,
                         }}
                       >
-                        <Image
-                          source={{ uri: CAUSE_IMAGES[cause] }}
-                          style={{ width: 60, height: 60, borderRadius: 30 }}
-                        />
+                        <View style={{ width: 62, height: 62, borderRadius: 31, backgroundColor: coverProps.bgColor, justifyContent: 'center', alignItems: 'center' }}>
+                          <IconComponent name={coverProps.icon as any} size={28} color="#ffffff" />
+                        </View>
                       </View>
-                      {/* Play Badge */}
+                    ) : isSeen ? (
+                      /* Seen State Ring */
+                      <View
+                        style={{
+                          width: 72,
+                          height: 72,
+                          borderRadius: 36,
+                          borderWidth: 2,
+                          borderColor: themeColors.neutralStroke2,
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <View style={{ width: 62, height: 62, borderRadius: 31, backgroundColor: coverProps.bgColor, justifyContent: 'center', alignItems: 'center', opacity: 0.65 }}>
+                          <IconComponent name={coverProps.icon as any} size={28} color="#ffffff" />
+                        </View>
+                      </View>
+                    ) : (
+                      /* Unseen State Ring with Rotating Gradient and play badge */
+                      <View style={{ width: 72, height: 72, justifyContent: 'center', alignItems: 'center' }}>
+                        <Animated.View
+                          style={{
+                            position: 'absolute',
+                            width: 72,
+                            height: 72,
+                            borderRadius: 36,
+                            overflow: 'hidden',
+                            transform: [{ rotate: rotateStr }],
+                          }}
+                        >
+                          <LinearGradient
+                            colors={['#0f6cbd', '#8660a9', '#d86109', '#0f6cbd']}
+                            style={{ flex: 1 }}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                          />
+                        </Animated.View>
+                        <View
+                          style={{
+                            width: 66,
+                            height: 66,
+                            borderRadius: 33,
+                            backgroundColor: themeColors.neutralBackground1,
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            zIndex: 1,
+                          }}
+                        >
+                          <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: coverProps.bgColor, justifyContent: 'center', alignItems: 'center' }}>
+                            <IconComponent name={coverProps.icon as any} size={26} color="#ffffff" />
+                          </View>
+                        </View>
+                        {/* Play Badge */}
+                        <View
+                          style={{
+                            position: 'absolute',
+                            bottom: 0,
+                            right: 0,
+                            width: 18,
+                            height: 18,
+                            borderRadius: 9,
+                            backgroundColor: themeColors.neutralBackground1,
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            borderWidth: 1.5,
+                            borderColor: themeColors.neutralBackground1,
+                            shadowColor: '#000',
+                            shadowOffset: { width: 0, height: 1 },
+                            shadowOpacity: 0.2,
+                            shadowRadius: 1.5,
+                            elevation: 2,
+                            zIndex: 2,
+                          }}
+                        >
+                          <Ionicons name="play" size={8} color={themeColors.brandForeground1} style={{ marginLeft: 1 }} />
+                        </View>
+                      </View>
+                    )}
+
+                    {/* Pinned Icon Badge */}
+                    {isPinned && (
                       <View
                         style={{
                           position: 'absolute',
-                          bottom: 0,
-                          right: 0,
-                          width: 18,
-                          height: 18,
-                          borderRadius: 9,
-                          backgroundColor: themeColors.neutralBackground1,
-                          justifyContent: 'center',
+                          top: -2,
+                          left: -2,
+                          backgroundColor: themeColors.brandForeground1,
+                          borderRadius: 8,
+                          width: 16,
+                          height: 16,
                           alignItems: 'center',
-                          borderWidth: 1.5,
-                          borderColor: themeColors.neutralBackground1,
-                          shadowColor: '#000',
-                          shadowOffset: { width: 0, height: 1 },
-                          shadowOpacity: 0.2,
-                          shadowRadius: 1.5,
-                          elevation: 2,
-                          zIndex: 2,
+                          justifyContent: 'center',
+                          zIndex: 3,
+                          borderWidth: 1,
+                          borderColor: '#ffffff',
                         }}
                       >
-                        <Ionicons name="play" size={8} color={themeColors.brandForeground1} style={{ marginLeft: 1 }} />
+                        <Ionicons name="pin" size={8} color="#ffffff" />
                       </View>
-                    </View>
-                  )}
+                    )}
+                  </View>
 
                   {/* Label below the circle */}
                   <Text
                     style={{
                       marginTop: 6,
                       fontSize: 11,
-                      fontWeight: '500',
-                      color: themeColors.neutralForeground2,
+                      fontWeight: isActive ? '600' : '500',
+                      color: isActive ? themeColors.brandForeground1 : themeColors.neutralForeground2,
                       textAlign: 'center',
                       lineHeight: 14,
                       height: 28,
@@ -1488,6 +1995,22 @@ export const Home: React.FC<HomeProps> = ({
               );
             })}
           </ScrollView>
+
+          {/* Fade Mask (16px) on the right edge */}
+          <LinearGradient
+            colors={['transparent', themeColors.neutralBackground2]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={{
+              position: 'absolute',
+              top: 0,
+              bottom: 0,
+              right: 0,
+              width: 16,
+              zIndex: 10,
+            }}
+            pointerEvents="none"
+          />
         </View>
 
         {/* ## Section 3: Micro-Volunteering Opportunity Card ## */}
@@ -1712,28 +2235,42 @@ export const Home: React.FC<HomeProps> = ({
         </Pressable>
 
         {/* ## Section 4: Location-Based Opportunities ## */}
-        {localOpportunities.length >= 3 && (
-          <View>
-            <View style={styles.locationHeaderRow}>
-              <Text style={[Typography.sectionHeading, { color: themeColors.neutralForeground1 }]}>
-                {localOpportunities.some(opp => !opp.isRemote && opp.distanceKm <= 5)
-                  ? "Opportunities in Gwalior"
-                  : "Opportunities Near You"}
-              </Text>
-            </View>
+        {(() => {
+          const filteredLocal = localOpportunities.filter(o => activeCategory === 'All' || o.cause === activeCategory);
+          if (filteredLocal.length > 0) {
+            return (
+              <View>
+                <View style={styles.locationHeaderRow}>
+                  <Text style={[Typography.sectionHeading, { color: themeColors.neutralForeground1 }]}>
+                    {localOpportunities.some(opp => !opp.isRemote && opp.distanceKm <= 5)
+                      ? "Opportunities in Gwalior"
+                      : "Opportunities Near You"}
+                  </Text>
+                </View>
 
-            <View style={styles.opportunitiesStack}>
-              {localOpportunities.slice(0, 5).map(opp => (
-                <OpportunityCard
-                  key={opp.id}
-                  opportunity={opp}
-                  onPress={() => handleOpportunityPress(opp)}
-                  isDarkMode={isDarkMode}
-                />
-              ))}
-            </View>
-          </View>
-        )}
+                <View style={styles.opportunitiesStack}>
+                  {filteredLocal.slice(0, 5).map(opp => (
+                    <OpportunityCard
+                      key={opp.id}
+                      opportunity={opp}
+                      onPress={() => handleOpportunityPress(opp)}
+                      isDarkMode={isDarkMode}
+                    />
+                  ))}
+                </View>
+              </View>
+            );
+          } else if (activeCategory !== 'All') {
+            return (
+              <View style={{ padding: Spacing.m, alignItems: 'center', marginVertical: Spacing.xs }}>
+                <Text style={{ color: themeColors.neutralForeground3, fontSize: 13 }}>
+                  No local opportunities for "{activeCategory}" matching Gwalior radius.
+                </Text>
+              </View>
+            );
+          }
+          return null;
+        })()}
 
         {/* Volunteer from Anywhere (Remote Section) */}
         <Text style={[styles.sectionTitle, Typography.sectionHeading, { color: themeColors.neutralForeground1 }]}>
@@ -1744,14 +2281,27 @@ export const Home: React.FC<HomeProps> = ({
         </Text>
         
         <View style={styles.opportunitiesStack}>
-          {remoteOpportunities.map(opp => (
-            <OpportunityCard
-              key={opp.id}
-              opportunity={opp}
-              onPress={() => handleOpportunityPress(opp)}
-              isDarkMode={isDarkMode}
-            />
-          ))}
+          {(() => {
+            const filteredRemote = remoteOpportunities.filter(o => activeCategory === 'All' || o.cause === activeCategory);
+            if (filteredRemote.length > 0) {
+              return filteredRemote.map(opp => (
+                <OpportunityCard
+                  key={opp.id}
+                  opportunity={opp}
+                  onPress={() => handleOpportunityPress(opp)}
+                  isDarkMode={isDarkMode}
+                />
+              ));
+            } else {
+              return (
+                <View style={{ padding: Spacing.m, alignItems: 'center', marginVertical: Spacing.xs }}>
+                  <Text style={{ color: themeColors.neutralForeground3, fontSize: 13 }}>
+                    No remote opportunities for "{activeCategory}".
+                  </Text>
+                </View>
+              );
+            }
+          })()}
         </View>
 
         {/* ## Section 5: Idea Threads ## */}
@@ -2056,42 +2606,58 @@ export const Home: React.FC<HomeProps> = ({
             }
           ]}
         >
-          {/* Top dark gradient overlay for legibility */}
-          <LinearGradient
-            colors={['rgba(0,0,0,0.65)', 'transparent']}
-            style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 110, zIndex: 10 }}
-            pointerEvents="none"
-          />
-
-          {/* Bottom dark gradient overlay for text readability */}
-          <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.85)']}
-            style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 420, zIndex: 5 }}
-            pointerEvents="none"
-          />
-
-          {/* Story Image background */}
-          <ImageBackground
-            source={{ uri: activeStories[storyIndex].imageUri }}
-            style={styles.storyBgImage}
-            resizeMode="cover"
-            accessibilityLabel={`${activeStories[storyIndex].headline}. ${activeStories[storyIndex].summary}. Source: ${activeStories[storyIndex].sourceName}. ${getStoryImpactText(activeStories[storyIndex], activeStoryCause)}.`}
-            accessibilityRole="image"
+          <Animated.View
+            style={{
+              flex: 1,
+              opacity: storyFadeAnim,
+              transform: [{ translateX: causeTransitionAnim }],
+            }}
           >
-            <View style={[styles.storyGradient, { flex: 1, zIndex: 8 }]}>
-              
-              {/* 1. Progress indicators at top */}
-              <View style={styles.storyProgressRow}>
-                {activeStories.map((s, idx) => {
-                  let progressWidth: any = '0%';
-                  if (idx < storyIndex) progressWidth = '100%';
-                  if (idx === storyIndex) {
-                    const reduceMotion = Personalization.getReduceMotion();
-                    if (reduceMotion) {
-                      progressWidth = '5%';
-                    } else {
-                      return (
-                        <View key={s.id} style={styles.storyProgressTrack}>
+            {/* Story Image background */}
+            <ImageBackground
+              source={{ uri: activeStories[storyIndex].imageUri }}
+              style={styles.storyBgImage}
+              resizeMode="cover"
+              accessibilityLabel={`${activeStories[storyIndex].headline}. ${activeStories[storyIndex].summary}. Source: ${activeStories[storyIndex].sourceName}. ${getStoryImpactText(activeStories[storyIndex], activeStoryCause)}.`}
+              accessibilityRole="image"
+            >
+              {/* Top dark gradient overlay for legibility (behind text/buttons, zIndex: 1) */}
+              <LinearGradient
+                colors={['rgba(0,0,0,0.65)', 'transparent']}
+                style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 110, zIndex: 1 }}
+                pointerEvents="none"
+              />
+
+              {/* Bottom dark gradient overlay for text readability (behind text/buttons, zIndex: 2) */}
+              <LinearGradient
+                colors={['transparent', 'rgba(0,0,0,0.95)']}
+                style={{ position: 'absolute', top: '40%', bottom: 0, left: 0, right: 0, zIndex: 2 }}
+                pointerEvents="none"
+              />
+
+              <View style={[styles.storyGradient, { flex: 1, zIndex: 10 }]}>
+                
+                {/* 1. Progress indicators at top - Segmented & Clickable */}
+                <View
+                  style={{
+                    position: 'absolute',
+                    top: insets.top > 0 ? insets.top : 16,
+                    left: Spacing.s,
+                    right: Spacing.s,
+                    flexDirection: 'row',
+                    zIndex: 130,
+                  }}
+                >
+                  {activeStories.map((s, idx) => {
+                    let progressContent;
+                    if (idx < storyIndex) {
+                      progressContent = <View style={[styles.storyProgressFill, { width: '100%' }]} />;
+                    } else if (idx === storyIndex) {
+                      const reduceMotion = Personalization.getReduceMotion();
+                      if (reduceMotion) {
+                        progressContent = <View style={[styles.storyProgressFill, { width: '5%' }]} />;
+                      } else {
+                        progressContent = (
                           <Animated.View
                             style={[
                               styles.storyProgressFill,
@@ -2103,183 +2669,432 @@ export const Home: React.FC<HomeProps> = ({
                               },
                             ]}
                           />
-                        </View>
-                      );
+                        );
+                      }
+                    } else {
+                      progressContent = <View style={[styles.storyProgressFill, { width: '0%' }]} />;
                     }
-                  }
+
+                    const segmentGap = activeStories.length > 8 ? 1 : 2;
+
+                    return (
+                      <Pressable
+                        key={s.id}
+                        onPress={() => handleSegmentTap(idx)}
+                        style={{ flex: 1, height: 16, justifyContent: 'center', marginHorizontal: segmentGap }}
+                        hitSlop={{ top: 10, bottom: 10 }}
+                        accessibilityLabel={`Story slide ${idx + 1} of ${activeStories.length}`}
+                        accessibilityRole="button"
+                      >
+                        <View style={{ height: 2, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 1, overflow: 'hidden', width: '100%' }}>
+                          {progressContent}
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                {/* 2. Top Header Row (Cause Logo & Name on Left, Bookmark Action on Right) */}
+                {(() => {
+                  const coverProps = getCauseCoverProps(activeStoryCause);
+                  const HeaderIconComponent = coverProps.iconFamily === 'MaterialCommunityIcons' ? MaterialCommunityIcons : Ionicons;
+                  const progressTop = insets.top > 0 ? insets.top : 16;
+                  const headerTop = progressTop + 24; // positioned 24px below the top of the progress bar
                   return (
-                    <View key={s.id} style={styles.storyProgressTrack}>
-                      <View style={[styles.storyProgressFill, { width: progressWidth }]} />
+                    <View
+                      style={{
+                        position: 'absolute',
+                        top: headerTop,
+                        left: Spacing.m,
+                        right: Spacing.m,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        zIndex: 120,
+                      }}
+                    >
+                      {/* Left: Cause Icon (44x44 circular, colored, same size as bookmark circle) & Name */}
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <View
+                          style={{
+                            width: 44,
+                            height: 44,
+                            borderRadius: 22,
+                            backgroundColor: coverProps.bgColor,
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            marginRight: 10,
+                            shadowColor: '#000',
+                            shadowOffset: { width: 0, height: 1 },
+                            shadowOpacity: 0.2,
+                            shadowRadius: 1.5,
+                            elevation: 3,
+                          }}
+                        >
+                          <HeaderIconComponent name={coverProps.icon as any} size={22} color="#ffffff" />
+                        </View>
+                        <Text
+                          style={{
+                            color: '#ffffff',
+                            fontSize: 16,
+                            fontWeight: 'bold',
+                            textShadowColor: 'rgba(0, 0, 0, 0.6)',
+                            textShadowOffset: { width: 1, height: 1 },
+                            textShadowRadius: 3,
+                          }}
+                        >
+                          {activeStoryCause}
+                        </Text>
+                      </View>
+
+                      {/* Right: Bookmark Button (44x44 circular) */}
+                      <Animated.View style={{ transform: [{ scale: bookmarkScaleAnim }] }}>
+                        <Pressable
+                          onPress={handleToggleBookmarkStory}
+                          style={{
+                            width: 44,
+                            height: 44,
+                            borderRadius: 22,
+                            backgroundColor: 'rgba(0,0,0,0.5)',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                          }}
+                          accessibilityLabel={causeBookmarkState[activeStoryCause] ? "Remove bookmark" : "Bookmark this cause"}
+                          accessibilityRole="button"
+                        >
+                          <Ionicons
+                            name={causeBookmarkState[activeStoryCause] ? "bookmark" : "bookmark-outline"}
+                            size={20}
+                            color={causeBookmarkState[activeStoryCause] ? themeColors.brandForeground1 : "#ffffff"}
+                          />
+                        </Pressable>
+                      </Animated.View>
                     </View>
                   );
-                })}
-              </View>
+                })()}
 
-              {/* 2. Top Header (Logo/Title on Left, Bookmark & Close on Right) */}
-              <View style={styles.storyHeader}>
-                {/* Cause Image logo + Name */}
-                <View style={styles.storyCauseBox}>
-                  <Image source={{ uri: CAUSE_IMAGES[activeStoryCause] }} style={styles.storyCauseLogo} />
-                  <Text style={styles.storyCauseName}>{activeStoryCause}</Text>
-                </View>
+                {/* Tapping Overlay Click Zones (Hold to pause, Tap to skip / caption expand) */}
+                <Pressable
+                  onPressIn={handleStoryPressIn}
+                  onPressOut={handleStoryPressOut}
+                  onPress={(evt) => {
+                    const pageX = evt.nativeEvent.pageX;
+                    if (pageX < screenWidth * 0.3) {
+                      triggerLeftFlash();
+                      handleStoryPrev();
+                    } else if (pageX > screenWidth * 0.7) {
+                      triggerRightFlash();
+                      handleStoryNext();
+                    } else {
+                      openCaptionSheet();
+                    }
+                  }}
+                  style={StyleSheet.absoluteFill}
+                />
 
-                {/* Header Action Buttons */}
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Pressable
-                    onPress={handleToggleBookmarkStory}
-                    style={{ padding: 6, marginRight: 8 }}
-                    accessibilityLabel={causeBookmarkState[activeStoryCause] ? "Remove bookmark" : "Bookmark this cause"}
-                    accessibilityRole="button"
-                  >
-                    <Ionicons
-                      name={causeBookmarkState[activeStoryCause] ? "bookmark" : "bookmark-outline"}
-                      size={22}
-                      color={causeBookmarkState[activeStoryCause] ? themeColors.brandForeground1 : "#ffffff"}
-                    />
-                  </Pressable>
-                  <Pressable
-                    onPress={closeStories}
-                    style={styles.storyCloseButton}
-                    accessibilityLabel="Close stories"
-                    accessibilityRole="button"
-                  >
-                    <Ionicons name="close" size={24} color="#ffffff" />
-                  </Pressable>
-                </View>
-              </View>
-
-              {/* Tapping Overlay Click Zones (Hold to pause, Tap to skip) */}
-              <Pressable
-                onPressIn={handleStoryPressIn}
-                onPressOut={handleStoryPressOut}
-                onPress={(evt) => {
-                  const pageX = evt.nativeEvent.pageX;
-                  if (pageX < screenWidth * 0.3) {
-                    handleStoryPrev();
-                  } else {
-                    handleStoryNext();
-                  }
-                }}
-                style={StyleSheet.absoluteFill}
-              />
-
-              {/* First-run Coach Mark */}
-              {showStoryCoachMark && (
-                <View
+                {/* Left Edge Flash overlay */}
+                <Animated.View
                   style={{
                     position: 'absolute',
-                    top: 100,
-                    left: Spacing.m,
-                    right: Spacing.m,
-                    backgroundColor: 'rgba(0,0,0,0.75)',
-                    paddingVertical: 8,
-                    paddingHorizontal: 12,
-                    borderRadius: 8,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    zIndex: 25,
+                    top: 0,
+                    bottom: 0,
+                    left: 0,
+                    width: 60,
+                    opacity: leftFlashOpacity,
+                    zIndex: 80,
                   }}
                   pointerEvents="none"
                 >
-                  <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: '500' }}>
-                    💡 Tap left/right to skip • Hold to pause
-                  </Text>
-                </View>
-              )}
+                  <LinearGradient
+                    colors={['rgba(255,255,255,0.4)', 'transparent']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={{ flex: 1 }}
+                  />
+                </Animated.View>
 
-              {/* 3. Lower content Area */}
-              <View style={[styles.storyContentArea, { zIndex: 12 }]}>
-                
-                {/* Headline */}
-                <Text style={styles.storyHeadline}>
-                  {activeStories[storyIndex].headline}
-                </Text>
+                {/* Right Edge Flash overlay */}
+                <Animated.View
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    bottom: 0,
+                    right: 0,
+                    width: 60,
+                    opacity: rightFlashOpacity,
+                    zIndex: 80,
+                  }}
+                  pointerEvents="none"
+                >
+                  <LinearGradient
+                    colors={['transparent', 'rgba(255,255,255,0.4)']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={{ flex: 1 }}
+                  />
+                </Animated.View>
 
-                {/* AI Summary */}
-                <Text style={styles.storySummary}>
-                  {activeStories[storyIndex].summary}
-                </Text>
-
-                {/* Source citation */}
-                <Text style={styles.storySource}>
-                  Source: {activeStories[storyIndex].sourceName} • {activeStories[storyIndex].timestamp}
-                </Text>
-
-                {/* Contributors & Clarified Metrics */}
-                <View style={styles.storySocialRow}>
-                  {activeStories[storyIndex].contributorsCount > 0 && (
-                    <View style={styles.storyAvatarsStack}>
-                      {activeStories[storyIndex].contributorsAvatars.slice(0, 3).map((url, i) => (
-                        <Image
-                          key={url}
-                          source={{ uri: url }}
-                          style={[styles.storyAvatarItem, { marginLeft: i === 0 ? 0 : -8 }]}
-                        />
-                      ))}
-                    </View>
-                  )}
-                  <Text style={styles.storyContributorText}>
-                    {getStoryImpactText(activeStories[storyIndex], activeStoryCause)}
-                  </Text>
-                </View>
-
-                {/* Persistent CTA and Support Row */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: Spacing.s }}>
-                  
-                  {/* Primary CTA button (Gentle pulsing on last slide) */}
-                  <Animated.View style={{ flex: 1, transform: (storyIndex === activeStories.length - 1) ? [{ scale: ctaScale }] : [] }}>
-                    <Pressable
-                      onPress={() => {
-                        closeStories();
-                        openMicroVolunteering();
-                      }}
-                      style={[styles.storyCtaButton, { backgroundColor: '#0f6cbd', height: 48, borderRadius: Shapes.rounded, justifyContent: 'center', alignItems: 'center' }]}
-                    >
-                      <Text style={styles.storyCtaButtonText}>Help with this cause</Text>
-                    </Pressable>
-                  </Animated.View>
-
-                  {/* Secondary Support Action Pill Button */}
+                {/* First-run Coach Mark over the progress bars */}
+                {showStoryCoachMark && (
                   <Pressable
-                    onPress={handleSupportCause}
+                    onPress={dismissCoachMark}
                     style={{
-                      marginLeft: Spacing.s,
-                      height: 48,
-                      borderRadius: Shapes.rounded,
-                      borderWidth: 1.5,
-                      borderColor: causeSupportState[activeStoryCause]?.supported ? 'transparent' : '#ffffff',
-                      backgroundColor: causeSupportState[activeStoryCause]?.supported ? themeColors.brandBackgroundSubtle : 'transparent',
-                      paddingHorizontal: Spacing.m,
-                      flexDirection: 'row',
-                      alignItems: 'center',
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      height: 80,
+                      backgroundColor: 'rgba(15, 108, 189, 0.95)',
                       justifyContent: 'center',
-                      minWidth: 80,
+                      alignItems: 'center',
+                      paddingHorizontal: Spacing.m,
+                      zIndex: 150,
                     }}
                   >
-                    <Ionicons
-                      name={causeSupportState[activeStoryCause]?.supported ? "heart" : "heart-outline"}
-                      size={20}
-                      color={causeSupportState[activeStoryCause]?.supported ? themeColors.brandForeground1 : "#ffffff"}
-                    />
-                    <Text
-                      style={{
-                        color: causeSupportState[activeStoryCause]?.supported ? themeColors.brandForeground1 : "#ffffff",
-                        fontWeight: '600',
-                        fontSize: 14,
-                        marginLeft: 6,
-                      }}
-                    >
-                      {causeSupportState[activeStoryCause]?.count || 0}
+                    <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: '600', textAlign: 'center' }}>
+                      💡 Tap left/right to skip · Hold to pause · Tap segments to jump
+                    </Text>
+                    <Text style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: 10, marginTop: 4 }}>
+                      Tap to dismiss
                     </Text>
                   </Pressable>
+                )}
+
+                {/* Swipe down to close coachmark */}
+                {showSwipeCoachMark && (
+                  <View
+                    style={{
+                      position: 'absolute',
+                      top: '45%',
+                      left: 0,
+                      right: 0,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      zIndex: 140,
+                    }}
+                    pointerEvents="none"
+                  >
+                    <View
+                      style={{
+                        backgroundColor: 'rgba(0, 0, 0, 0.75)',
+                        paddingHorizontal: 20,
+                        paddingVertical: 12,
+                        borderRadius: 20,
+                        alignItems: 'center',
+                        flexDirection: 'column',
+                      }}
+                    >
+                      <Ionicons name="chevron-down" size={18} color="#ffffff" style={{ marginBottom: 4 }} />
+                      <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: '600' }}>
+                        Swipe down to close
+                      </Text>
+                    </View>
+                  </View>
+                )}
+
+                {/* 3. Lower content Area (respect safe-area inset bottom padding) */}
+                <View style={[styles.storyContentArea, { zIndex: 12, paddingBottom: insets.bottom > 0 ? insets.bottom + 16 : 24 }]}>
+                  
+                  {/* Headline */}
+                  <Text style={styles.storyHeadline}>
+                    {activeStories[storyIndex].headline}
+                  </Text>
+
+                  {/* AI Summary */}
+                  <Text style={styles.storySummary}>
+                    {activeStories[storyIndex].summary}
+                  </Text>
+
+                  {/* Source citation */}
+                  <Text style={styles.storySource}>
+                    Source: {activeStories[storyIndex].sourceName} • {activeStories[storyIndex].timestamp}
+                  </Text>
+
+                  {/* Contributors & Clarified Metrics */}
+                  <View style={styles.storySocialRow}>
+                    {activeStories[storyIndex].contributorsCount > 0 && (
+                      <View style={styles.storyAvatarsStack}>
+                        {activeStories[storyIndex].contributorsAvatars.slice(0, 3).map((url, i) => (
+                          <Image
+                            key={url}
+                            source={{ uri: url }}
+                            style={[styles.storyAvatarItem, { marginLeft: i === 0 ? 0 : -8 }]}
+                          />
+                        ))}
+                      </View>
+                    )}
+                    <Text style={styles.storyContributorText}>
+                      {getStoryImpactText(activeStories[storyIndex], activeStoryCause)}
+                    </Text>
+                  </View>
+
+                  {/* Persistent CTA and Support Row */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: Spacing.s }}>
+                    
+                    {/* Primary CTA button with basic touch scale feedback */}
+                    <Animated.View style={{ flex: 1, transform: [{ scale: ctaPressScale }] }}>
+                      <Pressable
+                        onPressIn={handleStoryCtaPressIn}
+                        onPressOut={handleStoryCtaPressOut}
+                        onPress={() => {
+                          closeStories();
+                          openMicroVolunteering();
+                        }}
+                        style={[styles.storyCtaButton, { backgroundColor: '#0f6cbd', height: 48, borderRadius: Shapes.rounded, justifyContent: 'center', alignItems: 'center' }]}
+                      >
+                        <Text style={styles.storyCtaButtonText}>Help with this cause</Text>
+                      </Pressable>
+                    </Animated.View>
+
+                    {/* Secondary Support Action Pill Button */}
+                    <Pressable
+                      onPress={handleSupportCause}
+                      style={{
+                        marginLeft: Spacing.s,
+                        height: 48,
+                        borderRadius: Shapes.rounded,
+                        borderWidth: 1.5,
+                        borderColor: causeSupportState[activeStoryCause]?.supported ? 'transparent' : '#ffffff',
+                        backgroundColor: causeSupportState[activeStoryCause]?.supported ? themeColors.brandBackgroundSubtle : 'transparent',
+                        paddingHorizontal: Spacing.m,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        minWidth: 80,
+                      }}
+                    >
+                      <Animated.View style={{ transform: [{ scale: heartScaleAnim }] }}>
+                        <Ionicons
+                          name={causeSupportState[activeStoryCause]?.supported ? "heart" : "heart-outline"}
+                          size={20}
+                          color={causeSupportState[activeStoryCause]?.supported ? (themeColors.dangerForeground1 || '#ff3b30') : "#ffffff"}
+                        />
+                      </Animated.View>
+                      <Text
+                        style={{
+                          color: causeSupportState[activeStoryCause]?.supported ? (themeColors.dangerForeground1 || '#ff3b30') : "#ffffff",
+                          fontWeight: '600',
+                          fontSize: 14,
+                          marginLeft: 6,
+                        }}
+                      >
+                        {causeSupportState[activeStoryCause]?.count || 0}
+                      </Text>
+                    </Pressable>
+
+                  </View>
 
                 </View>
 
               </View>
-
-            </View>
-          </ImageBackground>
+            </ImageBackground>
+          </Animated.View>
         </Animated.View>
+      )}
+
+      {/* Caption Bottom Sheet */}
+      {isCaptionSheetOpen && activeStoryCause && activeStories[storyIndex] && (
+        <View
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            backgroundColor: themeColors.neutralBackground1,
+            borderTopLeftRadius: 16,
+            borderTopRightRadius: 16,
+            paddingHorizontal: Spacing.m,
+            paddingTop: Spacing.m,
+            paddingBottom: insets.bottom > 0 ? insets.bottom + 16 : 24,
+            zIndex: 130,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: -4 },
+            shadowOpacity: 0.2,
+            shadowRadius: 10,
+            elevation: 20,
+          }}
+        >
+          {/* Handlebar indicator */}
+          <View
+            style={{
+              width: 40,
+              height: 4,
+              borderRadius: 2,
+              backgroundColor: themeColors.neutralStroke2,
+              alignSelf: 'center',
+              marginBottom: Spacing.m,
+            }}
+          />
+
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.s }}>
+            <Text style={[Typography.bodyStrong, { color: themeColors.brandForeground1, textTransform: 'uppercase', fontSize: 12, letterSpacing: 0.5 }]}>
+              {activeStoryCause}
+            </Text>
+            <Pressable
+              onPress={closeCaptionSheet}
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 16,
+                backgroundColor: themeColors.neutralBackground2,
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}
+            >
+              <Ionicons name="close" size={18} color={themeColors.neutralForeground1} />
+            </Pressable>
+          </View>
+
+          <Text style={[Typography.sectionHeading, { color: themeColors.neutralForeground1, marginBottom: Spacing.s }]}>
+            {activeStories[storyIndex].headline}
+          </Text>
+
+          <ScrollView style={{ maxHeight: 200, marginBottom: Spacing.m }} showsVerticalScrollIndicator={true}>
+            <Text style={[Typography.body, { color: themeColors.neutralForeground2, lineHeight: 20 }]}>
+              {activeStories[storyIndex].summary}
+            </Text>
+            <Text style={[Typography.caption, { color: themeColors.neutralForeground3, marginTop: Spacing.s }]}>
+              Source: {activeStories[storyIndex].sourceName} • {activeStories[storyIndex].timestamp}
+            </Text>
+          </ScrollView>
+
+          <View style={{ flexDirection: 'row', gap: Spacing.s }}>
+            <Pressable
+              onPress={() => {
+                closeCaptionSheet();
+                closeStories();
+                openMicroVolunteering();
+              }}
+              style={{
+                flex: 1,
+                backgroundColor: themeColors.brandForeground1,
+                height: 48,
+                borderRadius: Shapes.rounded,
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}
+            >
+              <Text style={{ color: '#ffffff', fontWeight: '600' }}>Help with this cause</Text>
+            </Pressable>
+            <Pressable
+              onPress={handleSupportCause}
+              style={{
+                backgroundColor: causeSupportState[activeStoryCause]?.supported ? themeColors.brandBackgroundSubtle : themeColors.neutralBackground2,
+                width: 60,
+                height: 48,
+                borderRadius: Shapes.rounded,
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}
+            >
+              <Ionicons
+                name={causeSupportState[activeStoryCause]?.supported ? "heart" : "heart-outline"}
+                size={22}
+                color={causeSupportState[activeStoryCause]?.supported ? themeColors.brandForeground1 : themeColors.neutralForeground1}
+              />
+            </Pressable>
+          </View>
+        </View>
       )}
 
       {/* Friend Picker Bottom Sheet Modal */}
@@ -3072,7 +3887,7 @@ const styles = StyleSheet.create({
   },
   storyGradient: {
     flex: 1,
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     paddingTop: 44,
     paddingBottom: 24,
     paddingHorizontal: Spacing.m,
@@ -3084,15 +3899,16 @@ const styles = StyleSheet.create({
   },
   storyProgressTrack: {
     flex: 1,
-    height: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.35)',
+    height: 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     marginHorizontal: 2,
-    borderRadius: 1.5,
+    borderRadius: 1,
     overflow: 'hidden',
   },
   storyProgressFill: {
     height: '100%',
     backgroundColor: '#ffffff',
+    borderRadius: 1,
   },
   storyHeader: {
     flexDirection: 'row',
