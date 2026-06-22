@@ -56,7 +56,7 @@ export const Community: React.FC<CommunityProps> = ({ isDarkMode = false }) => {
       </View>
 
       {/* Active Team Members */}
-      <Text style={[styles.sectionTitle, Typography.bodyStrong, { color: themeColors.neutralForeground1 }]}>
+      <Text style={[styles.sectionTitle, Typography.sectionHeading, { color: themeColors.neutralForeground1 }]}>
         Active Colleagues Online
       </Text>
       
@@ -85,7 +85,7 @@ export const Community: React.FC<CommunityProps> = ({ isDarkMode = false }) => {
       </Card>
 
       {/* Accordion List for Channels */}
-      <Text style={[styles.sectionTitle, Typography.bodyStrong, { color: themeColors.neutralForeground1 }]}>
+      <Text style={[styles.sectionTitle, Typography.sectionHeading, { color: themeColors.neutralForeground1 }]}>
         Official Channels
       </Text>
 

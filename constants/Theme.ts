@@ -46,6 +46,14 @@ export const Colors = {
     infoForeground1: '#616161',
     infoBackground: '#616161',
     infoBackgroundSubtle: '#f5f5f5',
+
+    // Cause Tints (Light Theme)
+    causeEducation: '#9c27b0',
+    causeChild: '#ff9800',
+    causeHealth: '#009688',
+    causeWomen: '#e91e63',
+    causeElderly: '#3f51b5',
+    causePoverty: '#4caf50',
   },
   dark: {
     // Brand (Blue)
@@ -94,6 +102,14 @@ export const Colors = {
     infoForeground1: '#adadad',
     infoBackground: '#292929',
     infoBackgroundSubtle: '#1f1f1f',
+
+    // Cause Tints (Dark Theme)
+    causeEducation: '#ba68c8',
+    causeChild: '#ffb74d',
+    causeHealth: '#4db6ac',
+    causeWomen: '#f06292',
+    causeElderly: '#7986cb',
+    causePoverty: '#81c784',
   }
 };
 
@@ -134,6 +150,11 @@ export const Typography = {
     fontSize: 20,
     fontWeight: '600' as const,
     lineHeight: 28,
+  },
+  sectionHeading: {
+    fontSize: 20,
+    fontWeight: '600' as const,
+    lineHeight: 30,
   },
   title: {
     fontSize: 24,

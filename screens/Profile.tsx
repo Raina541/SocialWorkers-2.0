@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Switch, Pressable } from 'react-native';
 import { Colors, Spacing, Typography, Shapes } from '../constants/Theme';
 import { Avatar, PresenceState } from '../components/Avatar';
@@ -6,12 +6,19 @@ import { Card } from '../components/Card';
 import { Badge } from '../components/Badge';
 import { Button } from '../components/Button';
 import { Ionicons } from '@expo/vector-icons';
+import { Personalization, CauseType } from '../services/personalization';
+import { StoryService } from '../services/storyManager';
 
 interface ProfileProps {
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
   presence: PresenceState;
   onChangePresence: (state: PresenceState) => void;
+  onViewCauseStories?: (cause: CauseType) => void;
+  onViewLiveTest?: () => void;
+  onSignOut?: () => void;
+  useSandboxCommunity?: boolean;
+  onToggleSandboxCommunity?: (value: boolean) => void;
 }
 
 export const Profile: React.FC<ProfileProps> = ({
@@ -19,8 +26,33 @@ export const Profile: React.FC<ProfileProps> = ({
   onToggleDarkMode,
   presence,
   onChangePresence,
+  onViewCauseStories,
+  onViewLiveTest,
+  onSignOut,
+  useSandboxCommunity = false,
+  onToggleSandboxCommunity,
 }) => {
   const themeColors = isDarkMode ? Colors.dark : Colors.light;
+  const [allowMentions, setAllowMentions] = useState(Personalization.getAllowMentions());
+  const [reduceMotion, setReduceMotion] = useState(Personalization.getReduceMotion());
+
+  const handleToggleAllowMentions = (val: boolean) => {
+    setAllowMentions(val);
+    Personalization.setAllowMentions(val);
+  };
+
+  const handleToggleReduceMotion = (val: boolean) => {
+    setReduceMotion(val);
+    Personalization.setReduceMotion(val);
+  };
+
+  const causesList: CauseType[] = [
+    'Education', 'Healthcare', 'Child Welfare', 'Poverty Alleviation & Livelihoods',
+    'Women Empowerment', 'Disaster Relief', 'Environment & Sustainability', 'Animal Welfare',
+    'Support for Persons with Disabilities', 'Elderly Care', 'Water, Sanitation, and Hygiene (WASH)',
+    'Rural Development'
+  ];
+  const savedCauses = causesList.filter(c => StoryService.isCauseBookmarked(c));
 
   const presenceStates: PresenceState[] = ['Available', 'Busy', 'DND', 'Away', 'Offline'];
 
@@ -56,7 +88,7 @@ export const Profile: React.FC<ProfileProps> = ({
       </View>
 
       {/* Interactive Presence Selector */}
-      <Text style={[styles.sectionTitle, Typography.bodyStrong, { color: themeColors.neutralForeground1 }]}>
+      <Text style={[styles.sectionTitle, Typography.sectionHeading, { color: themeColors.neutralForeground1 }]}>
         Set Your Availability
       </Text>
       <Card variant="Filled" isDarkMode={isDarkMode}>
@@ -132,8 +164,43 @@ export const Profile: React.FC<ProfileProps> = ({
         </Card>
       </View>
 
+      {/* Saved Causes Section */}
+      {savedCauses.length > 0 && (
+        <View style={{ marginTop: Spacing.m }}>
+          <Text style={[styles.sectionTitle, Typography.sectionHeading, { color: themeColors.neutralForeground1, marginBottom: Spacing.s }]}>
+            Saved Causes
+          </Text>
+          <View style={{ gap: Spacing.s }}>
+            {savedCauses.map(cause => (
+              <Card
+                key={cause}
+                variant="Filled"
+                isDarkMode={isDarkMode}
+                onPress={() => onViewCauseStories?.(cause)}
+                style={{ padding: Spacing.m }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Ionicons name="bookmark" size={20} color={themeColors.brandForeground1} />
+                    <Text style={[Typography.bodyStrong, { color: themeColors.neutralForeground1, marginLeft: Spacing.s }]}>
+                      {cause}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={[Typography.caption, { color: themeColors.neutralForeground3, marginRight: 4 }]}>
+                      View stories
+                    </Text>
+                    <Ionicons name="chevron-forward" size={16} color={themeColors.neutralForeground3} />
+                  </View>
+                </View>
+              </Card>
+            ))}
+          </View>
+        </View>
+      )}
+
       {/* Settings Options */}
-      <Text style={[styles.sectionTitle, Typography.bodyStrong, { color: themeColors.neutralForeground1 }]}>
+      <Text style={[styles.sectionTitle, Typography.sectionHeading, { color: themeColors.neutralForeground1 }]}>
         Preferences & Settings
       </Text>
 
@@ -151,6 +218,75 @@ export const Profile: React.FC<ProfileProps> = ({
             onValueChange={onToggleDarkMode}
             trackColor={{ false: themeColors.neutralStroke1, true: themeColors.brandBackground }}
             thumbColor={isDarkMode ? '#ffffff' : '#f5f5f5'}
+          />
+        </View>
+      </Card>
+
+      {/* Privacy: Allow Mentions Switch */}
+      <Card variant="Filled" isDarkMode={isDarkMode} style={styles.settingItemCard}>
+        <View style={styles.settingRow}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: Spacing.s }}>
+            <Ionicons name="shield-checkmark" size={20} color={themeColors.neutralForeground2} />
+            <View style={{ marginLeft: Spacing.s, flex: 1 }}>
+              <Text style={[Typography.body, { color: themeColors.neutralForeground1, fontWeight: '500' }]}>
+                Allow mentions in ideas
+              </Text>
+              <Text style={[Typography.caption, { color: themeColors.neutralForeground3, marginTop: 2 }]}>
+                Let friends tag you in early-stage initiatives
+              </Text>
+            </View>
+          </View>
+          <Switch
+            value={allowMentions}
+            onValueChange={handleToggleAllowMentions}
+            trackColor={{ false: themeColors.neutralStroke1, true: themeColors.brandBackground }}
+            thumbColor={allowMentions ? '#ffffff' : '#f5f5f5'}
+          />
+        </View>
+      </Card>
+
+      {/* Reduce Motion Switch */}
+      <Card variant="Filled" isDarkMode={isDarkMode} style={styles.settingItemCard}>
+        <View style={styles.settingRow}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: Spacing.s }}>
+            <Ionicons name="flash-off" size={20} color={themeColors.neutralForeground2} />
+            <View style={{ marginLeft: Spacing.s, flex: 1 }}>
+              <Text style={[Typography.body, { color: themeColors.neutralForeground1, fontWeight: '500' }]}>
+                Reduce Motion
+              </Text>
+              <Text style={[Typography.caption, { color: themeColors.neutralForeground3, marginTop: 2 }]}>
+                Disable auto-advance and animations in stories
+              </Text>
+            </View>
+          </View>
+          <Switch
+            value={reduceMotion}
+            onValueChange={handleToggleReduceMotion}
+            trackColor={{ false: themeColors.neutralStroke1, true: themeColors.brandBackground }}
+            thumbColor={reduceMotion ? '#ffffff' : '#f5f5f5'}
+          />
+        </View>
+      </Card>
+
+      {/* Sandbox Toggle Switch */}
+      <Card variant="Filled" isDarkMode={isDarkMode} style={styles.settingItemCard}>
+        <View style={styles.settingRow}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: Spacing.s }}>
+            <Ionicons name="flask-outline" size={20} color={themeColors.neutralForeground2} />
+            <View style={{ marginLeft: Spacing.s, flex: 1 }}>
+              <Text style={[Typography.body, { color: themeColors.neutralForeground1, fontWeight: '500' }]}>
+                Use Sandbox Community View
+              </Text>
+              <Text style={[Typography.caption, { color: themeColors.neutralForeground3, marginTop: 2 }]}>
+                Toggle to test the duplicate sandbox of the Community tab
+              </Text>
+            </View>
+          </View>
+          <Switch
+            value={useSandboxCommunity}
+            onValueChange={onToggleSandboxCommunity}
+            trackColor={{ false: themeColors.neutralStroke1, true: themeColors.brandBackground }}
+            thumbColor={useSandboxCommunity ? '#ffffff' : '#f5f5f5'}
           />
         </View>
       </Card>
@@ -180,12 +316,25 @@ export const Profile: React.FC<ProfileProps> = ({
         </Pressable>
       </Card>
 
+      {/* Dynamic Live Update Tester Card */}
+      <Card variant="Filled" isDarkMode={isDarkMode} style={[styles.settingItemCard, { borderColor: themeColors.brandForeground1, borderWidth: 1 }]}>
+        <Pressable onPress={() => onViewLiveTest?.()} style={styles.settingRow}>
+          <View style={styles.settingLabelContainer}>
+            <Ionicons name="construct-outline" size={20} color={themeColors.brandForeground1} />
+            <Text style={[Typography.body, styles.settingText, { color: themeColors.brandForeground1, fontWeight: 'bold' }]}>
+              Launch Real-Time AI Story Tester
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={themeColors.brandForeground1} />
+        </Pressable>
+      </Card>
+
       {/* Sign Out */}
       <View style={{ marginTop: Spacing.xl }}>
         <Button
-          label="Sign Out of Portal"
+          label="Sign Out & Test Onboarding"
           appearance="Outline"
-          onPress={() => console.log('Signed out')}
+          onPress={onSignOut || (() => {})}
           isDarkMode={isDarkMode}
         />
       </View>
